@@ -59,13 +59,11 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
   - Retryable: `408`, `429`, `409` (when due to transient conflict), all `5xx` responses, and network timeouts/connection errors; on retryable error keep SQS message and schedule next attempt.
 - Retry exhaustion condition: `attempt_count >= max_retries` => mark `failed`, delete SQS message.
 
-7. **Retry Schedule (Must Resolve)**
-- Confirm Week 1 policy:
-  - Fixed schedule (`1m, 5m, 30m`) **or**
-  - Visibility-timeout-only retries **or**
-  - Exponential backoff.
-- Confirm whether Week 2 changes retry algorithm or keeps same behavior.
-
+7. **Retry Schedule**
+- Week 1 policy (final): **Visibility-timeout-only retries**.
+  - Worker relies on SQS visibility timeout for all retries.
+  - `next_retry_at` and `gsi1pk` / `gsi1sk` fields are **not** used by the Week 1 worker logic and are reserved for a future scheduled-retry design.
+- Week 2+ may introduce a different retry algorithm (e.g., fixed schedule `1m, 5m, 30m` or exponential backoff using `next_retry_at` + GSI), but any change must go through the **Change Control Rule** in section 12.
 8. **Idempotency and Duplicate Processing**
 - Eng1 guarantees unique `event_id` creation for non-duplicates.
 - Eng2 processing is safe under SQS at-least-once delivery (duplicate message handling defined).
