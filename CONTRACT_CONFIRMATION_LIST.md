@@ -29,8 +29,12 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
 
 3. **`webhook_events` Attempt Record Schema**
 - Attempt key format: `pk=EVENT#{event_id}`, `sk=ATTEMPT#{attempt_number}`.
-- Required attributes:
-  - `attempt_number`, `attempted_at`, `http_status`, `response_time_ms`, `error_message`.
+- Required attributes and types:
+  - `attempt_number` (Number)
+  - `attempted_at` (Number, unix seconds)
+  - `http_status` (Number)
+  - `response_time_ms` (Number)
+  - `error_message` (String)
 - Attempt numbering starts at `1` and increments per delivery try.
 
 4. **`webhook_configs` Contract**
