@@ -20,7 +20,12 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
   - `delivered_at` (Optional Number, unix seconds; attribute omitted until event is delivered)
   - `next_retry_at` (Optional Number, unix seconds; attribute omitted when no retry is scheduled)
   - `gsi1pk`, `gsi1sk` when retryable
-- Status transition rules are agreed and immutable for MVP.
+- `status` state machine (MVP, immutable):
+  - Initial state for all new events is `pending`.
+  - On successful delivery (`2xx` HTTP response): `pending → delivered`.
+  - On retryable failure (per agreed error classes) *before* exhaustion: `pending → pending` with `attempt_count` incremented and `next_retry_at` updated as per retry schedule.
+  - On retry exhaustion (`attempt_count >= max_retries`) or non‑retryable terminal condition (including missing/inactive config): `pending → failed`.
+  - `delivered` and `failed` are terminal states for MVP: no further automatic or manual transitions (no retries) from these states.
 
 3. **`webhook_events` Attempt Record Schema**
 - Attempt key format: `pk=EVENT#{event_id}`, `sk=ATTEMPT#{attempt_number}`.
