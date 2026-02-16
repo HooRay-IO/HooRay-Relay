@@ -17,8 +17,8 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
   - `status` (String: `pending|delivered|failed`)
   - `attempt_count` (Number)
   - `created_at` (Number, unix seconds)
-  - `delivered_at` (Number|null)
-  - `next_retry_at` (Number|null)
+  - `delivered_at` (Optional Number, unix seconds; attribute omitted until event is delivered)
+  - `next_retry_at` (Optional Number, unix seconds; attribute omitted when no retry is scheduled)
   - `gsi1pk`, `gsi1sk` when retryable
 - Status transition rules are agreed and immutable for MVP.
 
