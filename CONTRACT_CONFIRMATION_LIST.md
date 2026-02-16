@@ -6,7 +6,7 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
 - Queue message body is exactly `event_id` string (example: `evt_1a2b3c4d`).
 - If JSON is used instead, define exact schema now (`{"event_id":"..."}`).
 - Message attributes required/optional (e.g., `customer_id`) are finalized.
-- SQS settings: visibility timeout, max receive count, DLQ attached.
+- SQS settings (fixed for MVP): visibility timeout = 60s; `max_receive_count = max_retries + 1` (initial attempt + `max_retries`); DLQ attached with CloudWatch alarm when DLQ message count > 0.
 
 2. **`webhook_events` Metadata Schema**
 - PK/SK format is fixed: `pk=EVENT#{event_id}`, `sk=v0`.
