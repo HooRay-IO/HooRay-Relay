@@ -54,7 +54,9 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
 
 6. **Success/Retry/Exhaustion Rules**
 - `2xx` => success: record attempt, mark `delivered`, delete SQS message.
-- `4xx/5xx` + network timeout/connection errors => retryable or terminal? (confirm per class).
+- HTTP error classification:
+  - Terminal (no retry): `400`, `401`, `403`, `404`, `422`, and other non-retryable `4xx` codes indicating an invalid request; on terminal error mark event `failed` and delete SQS message.
+  - Retryable: `408`, `429`, `409` (when due to transient conflict), all `5xx` responses, and network timeouts/connection errors; on retryable error keep SQS message and schedule next attempt.
 - Retry exhaustion condition: `attempt_count >= max_retries` => mark `failed`, delete SQS message.
 
 7. **Retry Schedule (Must Resolve)**
