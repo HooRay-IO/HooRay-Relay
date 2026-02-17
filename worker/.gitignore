@@ -1,0 +1,32 @@
+# Rust build outputs
+/target/
+
+# Cargo lockfile policy
+# Keep Cargo.lock for binaries; ignore only if you decide this crate should be a library.
+# /Cargo.lock
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and runtime dumps
+*.log
+*.out
+*.err
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test and coverage artifacts
+coverage/
+*.profraw
+*.profdata
+
+# Lambda/SAM local artifacts (if generated under worker)
+.aws-sam/
