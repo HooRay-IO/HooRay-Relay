@@ -14,11 +14,20 @@ pub enum EventStatus {
 pub struct Event {
     pub event_id: String,
     pub customer_id: String,
+    /// Raw JSON payload as received from the webhook source.
+    ///
+    /// This is intentionally stored as a `String` to preserve the exact bytes
+    /// for passthrough, auditing, and replay scenarios. Downstream consumers
+    /// may choose to deserialize this field into a typed structure, which can
+    /// result in an additional JSON deserialization step.
     pub payload: String,
     pub status: EventStatus,
     pub attempt_count: u32,
+    /// Time at which the event was created, as a Unix timestamp in seconds since the Unix epoch.
     pub created_at: i64,
+    /// Time at which the event was successfully delivered, as a Unix timestamp in seconds since the Unix epoch.
     pub delivered_at: Option<i64>,
+    /// Next scheduled retry time for delivering the event, as a Unix timestamp in seconds since the Unix epoch.
     pub next_retry_at: Option<i64>,
 }
 
@@ -69,6 +78,32 @@ impl Event {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mark_failed_clears_next_retry_and_sets_status_failed() {
+        let created_at = 1_700_000_000_i64;
+        let mut event = Event::new(
+            "event-1".to_string(),
+            "customer-1".to_string(),
+            "payload".to_string(),
+            created_at,
+        );
+
+        // Put the event into a retry-scheduled state first.
+        let retry_at = created_at + 60;
+        event.mark_retry_scheduled(retry_at);
+        assert_eq!(event.status, EventStatus::Pending);
+        assert_eq!(event.next_retry_at, Some(retry_at));
+
+        // Now mark the event as failed and verify terminal state.
+        event.mark_failed();
+        assert_eq!(event.status, EventStatus::Failed);
+        assert_eq!(event.next_retry_at, None);
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebhookConfig {
     pub customer_id: String,
@@ -119,7 +154,7 @@ impl DeliveryAttempt {
     ) -> Self {
         Self {
             event_id,
-            attempt_number: attempt_number,
+            attempt_number,
             attempted_at,
             http_status,
             response_time_ms,
@@ -157,9 +192,14 @@ pub enum WorkerError {
     #[error("Item not found during decoding: {entity} for {key}")]
     ItemNotFound { entity: &'static str, key: String },
     #[error("DynamoDB decoding error: {0}")]
-    DecodeDynamo(#[from] serde_dynamo::Error),
+    DecodeDynamo(String),
 }
 
+impl From<serde_dynamo::Error> for WorkerError {
+    fn from(err: serde_dynamo::Error) -> Self {
+        WorkerError::DecodeDynamo(err.to_string())
+    }
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QueueMessage {
     pub event_id: String,
