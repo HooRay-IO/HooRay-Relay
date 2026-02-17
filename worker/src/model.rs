@@ -111,6 +111,7 @@ impl DeliveryAttempt {
 
     pub fn new(
         event_id: String,
+        attempt_number: u32,
         attempted_at: i64,
         http_status: Option<u16>,
         response_time_ms: u64,
@@ -118,7 +119,7 @@ impl DeliveryAttempt {
     ) -> Self {
         Self {
             event_id,
-            attempt_number: 1,
+            attempt_number: attempt_number,
             attempted_at,
             http_status,
             response_time_ms,
@@ -153,8 +154,8 @@ pub enum WorkerError {
     Sqs(String),
     #[error("delivery error: {0}")]
     Delivery(String),
-    #[error("Item not found")]
-    DecodeNotFound,
+    #[error("Item not found during decoding: {entity} for {key}")]
+    ItemNotFound { entity: &'static str, key: String },
     #[error("DynamoDB decoding error: {0}")]
     DecodeDynamo(#[from] serde_dynamo::Error),
 }
@@ -215,6 +216,21 @@ mod tests {
         let status = EventStatus::Delivered;
         let encoded = serde_json::to_string(&status).expect("status should serialize");
         assert_eq!(encoded, "\"delivered\"");
+    }
+
+    #[test]
+    fn event_key_helpers_match_dynamodb_contract() {
+        let event = Event::new(
+            "evt_abc123".to_string(),
+            "cust_123".to_string(),
+            "{}".to_string(),
+            1_707_840_000,
+        );
+
+        assert_eq!(event.pk(), "EVENT#evt_abc123");
+        assert_eq!(Event::metadata_sk(), "v0");
+        assert_eq!(Event::attempt_sk(1), "ATTEMPT#1");
+        assert_eq!(Event::attempt_sk(3), "ATTEMPT#3");
     }
 
     #[test]
