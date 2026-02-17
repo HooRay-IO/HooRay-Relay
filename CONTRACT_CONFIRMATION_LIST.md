@@ -69,8 +69,18 @@ Please confirm each item with explicit `✅ yes` / `❌ change needed`.
 - Eng2 processing is safe under SQS at-least-once delivery (duplicate message handling defined).
 
 9. **Observability Contract**
-- Required structured log fields (minimum): `event_id`, `customer_id`, `attempt_number`, `result`, `http_status`, `latency_ms`, `error`.
-- Required metrics names and dimensions (success/failure/latency/queue depth).
+- Log format: JSON structured logging; each log line MUST be a single JSON object (see `PROJECT_DICTIONARY.md` examples).
+- Required structured log fields (minimum JSON properties): `event_id`, `customer_id`, `attempt_number`, `result`, `http_status`, `latency_ms`, `error`.
+- Required CloudWatch metrics (both teams MUST emit with these exact names):
+  - `webhook.delivery.success` (count)
+  - `webhook.delivery.failure` (count)
+  - `webhook.delivery.latency_ms` (distribution of end-to-end delivery latency in milliseconds)
+  - `webhook.queue.depth` (current SQS queue depth / number of messages visible)
+- Required metric dimensions (applied consistently across all metrics where applicable):
+  - `customer_id`
+  - `status_code` (HTTP status code for the delivery attempt, e.g., `200`, `500`)
+  - `queue_name` (SQS queue name)
+  - `environment` (e.g., `dev`, `staging`, `prod`)
 
 10. **Integration Test Acceptance (Day 5)**
 - Test cases both teams agree to pass:
