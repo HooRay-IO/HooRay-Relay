@@ -234,14 +234,15 @@ impl DynamoDbService {
     #[instrument(skip(self, event), fields(event_id = %event.event_id))]
     pub async fn update_event_status(&self, event: &Event) -> Result<(), WorkerError> {
         // Implementation would involve updating the event item with the new status and next retry time if needed
-        let pk = Event::pk(&event);
+        let pk = event.pk();
         let sk = Event::metadata_sk().to_string();
-        self.client
+        let mut request = self
+            .client
             .update_item()
             .table_name(&self.webhook_events_table)
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
-            .update_expression("SET #status = :status, next_retry_at = :next_retry_at")
+            .update_expression("SET #status = :status")
             .expression_attribute_names("#status", "status")
             .expression_attribute_values(
                 ":status",
@@ -253,11 +254,18 @@ impl DynamoDbService {
                     }
                     .to_string(),
                 ),
-            )
-            .expression_attribute_values(
-                ":next_retry_at",
-                AttributeValue::N(event.next_retry_at.unwrap_or(0).to_string()),
-            )
+            );
+
+        if let Some(next_retry_at) = event.next_retry_at {
+            request = request
+                .update_expression("SET #status = :status, next_retry_at = :next_retry_at")
+                .expression_attribute_values(
+                    ":next_retry_at",
+                    AttributeValue::N(next_retry_at.to_string()),
+                );
+        }
+
+        request
             .send()
             .await
             .map_err(|e| {
@@ -274,7 +282,7 @@ impl DynamoDbService {
 
     #[instrument(skip(self, event), fields(event_id = %event.event_id))]
     pub async fn increment_attempt_count(&self, event: &Event) -> Result<(), WorkerError> {
-        let pk = Event::pk(&event);
+        let pk = event.pk();
         let sk = Event::metadata_sk().to_string();
         self.client
             .update_item()
