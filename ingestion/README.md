@@ -32,7 +32,7 @@
 
 **Day 1 goal (from `ENGINEER_1_TIMELINE.md`):**
 > Initialize Rust ingestion project · Update `Cargo.toml` · Define data models
-> in `src/models.rs` · Initialize git repository with first commit
+> in `src/model.rs` · Initialize git repository with first commit
 
 ---
 

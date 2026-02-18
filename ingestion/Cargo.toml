@@ -24,7 +24,7 @@ axum = "0.8"
 # aws-sdk
 aws-config = "1.8.14"
 aws-sdk-dynamodb = "1"
-aws-sdk-sqs = "1.94.0"
+aws-sdk-sqs = "1.95.0"
 serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+1"] }
 
 # unique ID generation

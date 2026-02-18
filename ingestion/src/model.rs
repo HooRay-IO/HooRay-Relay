@@ -236,6 +236,48 @@ pub struct QueueMessage {
     pub event_id: String,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn queue_message_serializes_to_event_id_only() {
+        let msg = QueueMessage {
+            event_id: "evt_123".to_string(),
+        };
+
+        let serialized = serde_json::to_string(&msg).expect("serialization should succeed");
+        assert_eq!(serialized, r#"{"event_id":"evt_123"}"#);
+    }
+
+    #[test]
+    fn queue_message_deserializes_with_additional_attributes_field() {
+        // Simulate the worker-side JSON format that includes an `attributes` field.
+        let json = r#"{
+            "event_id": "evt_123",
+            "attributes": {
+                "key": "value"
+            }
+        }"#;
+
+        let msg: QueueMessage =
+            serde_json::from_str(json).expect("deserialization should ignore extra fields");
+        assert_eq!(msg.event_id, "evt_123");
+    }
+
+    #[test]
+    fn queue_message_round_trips_through_json() {
+        let original = QueueMessage {
+            event_id: "evt_roundtrip".to_string(),
+        };
+
+        let json = serde_json::to_string(&original).expect("serialization should succeed");
+        let decoded: QueueMessage =
+            serde_json::from_str(&json).expect("deserialization should succeed");
+
+        assert_eq!(decoded, original);
+    }
+}
 // ---------------------------------------------------------------------------
 // Error types
 // ---------------------------------------------------------------------------
@@ -290,7 +332,7 @@ mod tests {
         assert_eq!(req.idempotency_key, "req_abc123");
         assert_eq!(req.customer_id, "cust_xyz123");
 
-        // Serialise and round-trip.
+        // Serialize and round-trip.
         let encoded = serde_json::to_string(&req).expect("request should serialize");
         let decoded: WebhookReceiveRequest =
             serde_json::from_str(&encoded).expect("round-trip should deserialize");
@@ -379,7 +421,7 @@ mod tests {
         assert_eq!(decoded.attempt_count, 0);
     }
 
-    /// Verifies that the ingestion model deserialises the exact fixture that
+    /// Verifies that the ingestion model deserializes the exact fixture that
     /// the worker's model serialises — confirming the two models share the same
     /// DynamoDB wire format.
     #[test]
