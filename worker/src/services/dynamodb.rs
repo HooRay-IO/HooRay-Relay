@@ -161,7 +161,7 @@ impl DynamoDbService {
     pub async fn get_config(&self, customer_id: &str) -> Result<WebhookConfig, WorkerError> {
         info!("fetching webhook config");
         let pk = format!("CUSTOMER#{}", customer_id);
-        let sk = "CONFIG".to_string();
+        let sk = WebhookConfig::sk().to_string();
         let resp = self
             .client
             .get_item()
@@ -188,12 +188,10 @@ impl DynamoDbService {
     }
 
     /// Records a delivery attempt for an event in DynamoDB.
-    /// This will create a new item for the attempt and update the event's attempt count and next retry time.
+    /// This creates a new item for the attempt in the webhook events table.
     #[instrument(skip(self, attempt), fields(event_id = %attempt.event_id, attempt_number = attempt.attempt_number))]
     pub async fn record_attempt(&self, attempt: DeliveryAttempt) -> Result<(), WorkerError> {
-        // Implementation would involve:
-        // 1. Create a new item for the delivery attempt with pk=EVENT#<event_id> and sk=ATTEMPT#<attempt_number>
-        // 2. Update the event item to increment the attempt count and set the next retry time if needed
+        // Create a new item for the delivery attempt with pk=EVENT#<event_id> and sk=ATTEMPT#<attempt_number>
         let mut request = self
             .client
             .put_item()
