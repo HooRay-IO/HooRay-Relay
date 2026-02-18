@@ -536,6 +536,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "common"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_dynamo",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2634,6 +2644,7 @@ dependencies = [
  "aws-config",
  "aws-sdk-dynamodb",
  "aws-sdk-sqs",
+ "common",
  "hex",
  "hmac",
  "reqwest",

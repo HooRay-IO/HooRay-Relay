@@ -2,101 +2,18 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum EventStatus {
-    Pending,
-    Delivered,
-    Failed,
-}
+// Re-export shared types from common crate
+pub use common::{EventStatus, WebhookConfig, WebhookEvent};
 
+// Type alias for backward compatibility in worker code
+pub type Event = WebhookEvent;
+
+// Worker-specific QueueMessage with attributes field
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Event {
+pub struct QueueMessage {
     pub event_id: String,
-    pub customer_id: String,
-    /// Raw JSON payload as received from the webhook source.
-    ///
-    /// This is intentionally stored as a `String` to preserve the exact bytes
-    /// for passthrough, auditing, and replay scenarios. Downstream consumers
-    /// may choose to deserialize this field into a typed structure, which can
-    /// result in an additional JSON deserialization step.
-    pub payload: String,
-    pub status: EventStatus,
-    pub attempt_count: u32,
-    /// Time at which the event was created, as a Unix timestamp in seconds since the Unix epoch.
-    pub created_at: i64,
-    /// Time at which the event was successfully delivered, as a Unix timestamp in seconds since the Unix epoch.
-    pub delivered_at: Option<i64>,
-    /// Next scheduled retry time for delivering the event, as a Unix timestamp in seconds since the Unix epoch.
-    pub next_retry_at: Option<i64>,
-}
-
-impl Event {
-    pub fn new(event_id: String, customer_id: String, payload: String, created_at: i64) -> Self {
-        Self {
-            event_id,
-            customer_id,
-            payload,
-            status: EventStatus::Pending,
-            attempt_count: 0,
-            created_at,
-            delivered_at: None,
-            next_retry_at: None,
-        }
-    }
-
-    pub fn pk(&self) -> String {
-        format!("EVENT#{}", self.event_id)
-    }
-
-    pub fn metadata_sk() -> &'static str {
-        "v0"
-    }
-
-    pub fn attempt_sk(attempt_number: u32) -> String {
-        format!("ATTEMPT#{}", attempt_number)
-    }
-
-    pub fn can_retry(&self, max_retries: u32) -> bool {
-        self.attempt_count < max_retries
-    }
-
-    pub fn mark_delivered(&mut self, delivered_at: i64) {
-        self.status = EventStatus::Delivered;
-        self.delivered_at = Some(delivered_at);
-        self.next_retry_at = None;
-    }
-
-    pub fn mark_retry_scheduled(&mut self, next_retry_at: i64) {
-        self.attempt_count += 1;
-        self.next_retry_at = Some(next_retry_at);
-    }
-
-    pub fn mark_failed(&mut self) {
-        self.status = EventStatus::Failed;
-        self.next_retry_at = None;
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WebhookConfig {
-    pub customer_id: String,
-    pub url: String,
-    pub secret: String,
-    pub max_retries: u32,
-    pub active: bool,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-impl WebhookConfig {
-    pub fn pk(&self) -> String {
-        format!("CUSTOMER#{}", self.customer_id)
-    }
-
-    pub fn sk() -> &'static str {
-        "CONFIG"
-    }
+    #[serde(default)]
+    pub attributes: HashMap<String, String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -115,7 +32,7 @@ impl DeliveryAttempt {
     }
 
     pub fn sk(&self) -> String {
-        Event::attempt_sk(self.attempt_number)
+        WebhookEvent::attempt_sk(self.attempt_number)
     }
 
     pub fn new(
@@ -163,22 +80,8 @@ pub enum WorkerError {
     Sqs(String),
     #[error("delivery error: {0}")]
     Delivery(String),
-    #[error("Item not found during decoding: {entity} for {key}")]
-    ItemNotFound { entity: &'static str, key: String },
-    #[error("DynamoDB decoding error: {0}")]
-    DecodeDynamo(String),
-}
-
-impl From<serde_dynamo::Error> for WorkerError {
-    fn from(err: serde_dynamo::Error) -> Self {
-        WorkerError::DecodeDynamo(err.to_string())
-    }
-}
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct QueueMessage {
-    pub event_id: String,
-    #[serde(default)]
-    pub attributes: HashMap<String, String>,
+    #[error(transparent)]
+    DynamoDbDecoding(#[from] common::DynamoDbError),
 }
 
 #[cfg(test)]

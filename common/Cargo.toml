@@ -1,0 +1,15 @@
+[package]
+name = "common"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# serde
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# error handling
+thiserror = "2.0"
+
+# aws-sdk (for DynamoDB attribute conversion)
+serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+1"] }
