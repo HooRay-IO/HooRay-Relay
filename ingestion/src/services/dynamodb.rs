@@ -149,15 +149,22 @@ mod tests {
             .collect();
 
         for (k, v) in vars {
-            std::env::set_var(k, v);
+            // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+            unsafe { std::env::set_var(k, v) };
         }
 
         f();
 
         for (k, original) in originals {
             match original {
-                Some(v) => std::env::set_var(k, v),
-                None => std::env::remove_var(k),
+                Some(v) => {
+                    // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+                    unsafe { std::env::set_var(k, v) };
+                }
+                None => {
+                    // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+                    unsafe { std::env::remove_var(k) };
+                }
             }
         }
     }
@@ -170,14 +177,16 @@ mod tests {
             keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
 
         for k in keys {
-            std::env::remove_var(k);
+            // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+            unsafe { std::env::remove_var(k) };
         }
 
         f();
 
         for (k, original) in originals {
             if let Some(v) = original {
-                std::env::set_var(k, v);
+                // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+                unsafe { std::env::set_var(k, v) };
             }
         }
     }

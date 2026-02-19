@@ -65,7 +65,7 @@ pub async fn check_and_record(
     // (between 2000-01-01 and 2100-01-01) to avoid invalid TTLs.
     const MIN_CREATED_AT: i64 = 946_684_800; // 2000-01-01T00:00:00Z
     const MAX_CREATED_AT: i64 = 4_102_444_800; // 2100-01-01T00:00:00Z
-    if created_at < MIN_CREATED_AT || created_at > MAX_CREATED_AT {
+    if !(MIN_CREATED_AT..=MAX_CREATED_AT).contains(&created_at) {
         return Err(IngestionError::DynamoDb(
             "invalid created_at timestamp for idempotency record".to_string(),
         ));

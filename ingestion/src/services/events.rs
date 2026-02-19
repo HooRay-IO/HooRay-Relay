@@ -28,7 +28,7 @@ use aws_sdk_dynamodb::types::AttributeValue;
 use serde_dynamo::aws_sdk_dynamodb_1::to_item;
 use tracing::{debug, info};
 
-use crate::model::{EventStatus, IngestionError, WebhookEvent};
+use crate::model::{IngestionError, WebhookEvent};
 
 /// 30-day TTL offset in seconds (30 × 24 × 60 × 60).
 const EVENT_TTL_SECS: i64 = 2_592_000;
@@ -112,6 +112,7 @@ pub fn serialize_payload(data: &serde_json::Value) -> Result<String, IngestionEr
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::EventStatus;
 
     // --- serialize_payload ---
 

@@ -236,8 +236,9 @@ pub enum EventStatus {
 ///
 /// DynamoDB key layout:
 /// - PK  = `EVENT#{event_id}`
-/// - SK  = `v0`   (metadata)
-///        `ATTEMPT#{n}` (delivery attempt records — see [`DeliveryAttempt`])
+/// - SK  =
+///   - `v0` (metadata)
+///   - `ATTEMPT#{n}` (delivery attempt records — see [`DeliveryAttempt`])
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebhookEvent {
     pub event_id: String,
