@@ -16,9 +16,12 @@
 //!
 //! ## Payload handling
 //!
-//! The raw JSON payload from the caller is stored verbatim as a `String`.
-//! Ingestion never re-parses or re-serializes it — this preserves exact bytes
-//! for passthrough, auditing, and future replay without schema coupling.
+//! The JSON payload from the caller is stored as a `String` containing
+//! a compact, normalized JSON representation. Handlers typically convert
+//! an inbound `serde_json::Value` into this string form, so insignificant
+//! formatting details (whitespace, field ordering) may differ from the
+//! original request body, while preserving the same JSON semantics for
+//! passthrough, auditing, and future replay.
 
 use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_dynamodb::types::AttributeValue;

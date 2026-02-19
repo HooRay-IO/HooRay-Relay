@@ -129,45 +129,55 @@ pub async fn build_dynamo_client() -> DynamoClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Mutex, OnceLock};
+
+    // Global mutex to serialize environment variable mutations in tests.
+    static ENV_MUTEX: OnceLock<Mutex<()>> = OnceLock::new();
+
+    fn env_lock() -> &'static Mutex<()> {
+        ENV_MUTEX.get_or_init(|| Mutex::new(()))
+    }
 
     // Helper: set multiple env vars, run a closure, then restore the originals.
     // This avoids test-order dependencies when running with `cargo test`.
     fn with_env_vars<F: FnOnce()>(vars: &[(&str, &str)], f: F) {
+        let _guard = env_lock().lock().unwrap();
+
         let originals: Vec<(&str, Option<String>)> = vars
             .iter()
             .map(|(k, _)| (*k, std::env::var(k).ok()))
             .collect();
 
         for (k, v) in vars {
-            // Safety: tests are single-threaded by default; no concurrent
-            // env mutations expected.
-            unsafe { std::env::set_var(k, v) };
+            std::env::set_var(k, v);
         }
 
         f();
 
         for (k, original) in originals {
             match original {
-                Some(v) => unsafe { std::env::set_var(k, v) },
-                None => unsafe { std::env::remove_var(k) },
+                Some(v) => std::env::set_var(k, v),
+                None => std::env::remove_var(k),
             }
         }
     }
 
     // Remove a list of vars, run a closure, then restore whatever was there.
     fn without_env_vars<F: FnOnce()>(keys: &[&str], f: F) {
+        let _guard = env_lock().lock().unwrap();
+
         let originals: Vec<(&str, Option<String>)> =
             keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
 
         for k in keys {
-            unsafe { std::env::remove_var(k) };
+            std::env::remove_var(k);
         }
 
         f();
 
         for (k, original) in originals {
             if let Some(v) = original {
-                unsafe { std::env::set_var(k, v) };
+                std::env::set_var(k, v);
             }
         }
     }
