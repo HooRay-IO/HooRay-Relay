@@ -1,4 +1,4 @@
-# Ingestion Service — Engineer 1, Day 1
+# Ingestion Service — Engineer 1 (Day 1 & Day 2)
 
 > **Sprint context:** This is the ingestion-side Lambda of the HooRay-Relay webhook
 > delivery system. Engineer 1 owns the ingestion pipeline; Engineer 2 owns the

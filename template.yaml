@@ -260,7 +260,7 @@ Resources:
       FunctionName: !Sub "hooray-relay-worker-${Environment}"
       CodeUri: worker/
       Handler: bootstrap
-      Timeout: 60          # Must be <= SqsVisibilityTimeoutSeconds
+      Timeout: 55          # Must be < SqsVisibilityTimeoutSeconds
       MemorySize: 256
       Policies:
         - DynamoDBCrudPolicy:

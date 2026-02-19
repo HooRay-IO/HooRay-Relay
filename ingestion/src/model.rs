@@ -23,6 +23,105 @@ pub struct WebhookReceiveRequest {
     pub data: serde_json::Value,
 }
 
+/// Maximum allowed length for an idempotency key.
+///
+/// This protects downstream storage (e.g. DynamoDB partition/sort keys) from
+/// pathological key sizes that could impact performance.
+const MAX_IDEMPOTENCY_KEY_LEN: usize = 256;
+
+/// Maximum allowed size, in bytes, of the serialized JSON payload.
+///
+/// DynamoDB items have a 400KB limit; we enforce the same upper bound on the
+/// JSON representation of `data` to avoid oversized items.
+const MAX_JSON_PAYLOAD_BYTES: usize = 400 * 1024;
+
+/// Validation errors for [`WebhookReceiveRequest`].
+#[derive(Debug, Error)]
+pub enum WebhookValidationError {
+    #[error("idempotency_key is invalid: {reason}")]
+    InvalidIdempotencyKey { reason: String },
+
+    #[error("customer_id is invalid: {reason}")]
+    InvalidCustomerId { reason: String },
+
+    #[error("data payload too large: {size} bytes (max {max} bytes)")]
+    DataTooLarge { size: usize, max: usize },
+
+    #[error("failed to serialize data payload: {0}")]
+    DataSerializationFailed(serde_json::Error),
+}
+
+impl WebhookReceiveRequest {
+    /// Validate the request fields for length, format and payload size.
+    ///
+    /// This should be called at the handler level before the request is used
+    /// for any persistence or further processing.
+    pub fn validate(&self) -> Result<(), WebhookValidationError> {
+        Self::validate_idempotency_key(&self.idempotency_key)?;
+        Self::validate_customer_id(&self.customer_id)?;
+        Self::validate_data_size(&self.data)?;
+        Ok(())
+    }
+
+    fn validate_idempotency_key(key: &str) -> Result<(), WebhookValidationError> {
+        if key.is_empty() {
+            return Err(WebhookValidationError::InvalidIdempotencyKey {
+                reason: "must not be empty".to_string(),
+            });
+        }
+        if key.len() > MAX_IDEMPOTENCY_KEY_LEN {
+            return Err(WebhookValidationError::InvalidIdempotencyKey {
+                reason: format!(
+                    "length {} exceeds maximum of {} characters",
+                    key.len(),
+                    MAX_IDEMPOTENCY_KEY_LEN
+                ),
+            });
+        }
+        if !key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+        {
+            return Err(WebhookValidationError::InvalidIdempotencyKey {
+                reason: "must contain only ASCII letters, digits, '_' or '-'".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+   fn validate_customer_id(customer_id: &str) -> Result<(), WebhookValidationError> {
+        if customer_id.is_empty() {
+            return Err(WebhookValidationError::InvalidCustomerId {
+                reason: "must not be empty".to_string(),
+            });
+        }
+        if !customer_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+        {
+            return Err(WebhookValidationError::InvalidCustomerId {
+                reason:
+                    "must contain only ASCII letters, digits, '.', '_' or '-'".to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    fn validate_data_size(
+        data: &serde_json::Value,
+    ) -> Result<(), WebhookValidationError> {
+        let bytes = serde_json::to_vec(data)
+            .map_err(WebhookValidationError::DataSerializationFailed)?;
+        let size = bytes.len();
+        if size > MAX_JSON_PAYLOAD_BYTES {
+            return Err(WebhookValidationError::DataTooLarge {
+                size,
+                max: MAX_JSON_PAYLOAD_BYTES,
+            });
+        }
+        Ok(())
+    }
+}
 /// Successful response for `POST /webhooks/receive`.
 ///
 /// HTTP 202 Accepted — event was stored and queued for delivery.

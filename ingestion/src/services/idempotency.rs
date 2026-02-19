@@ -61,11 +61,28 @@ pub async fn check_and_record(
     event_id: &str,
     created_at: i64,
 ) -> Result<IdempotencyOutcome, IngestionError> {
+    // Validate created_at is within a reasonable Unix timestamp range
+    // (between 2000-01-01 and 2100-01-01) to avoid invalid TTLs.
+    const MIN_CREATED_AT: i64 = 946_684_800;  // 2000-01-01T00:00:00Z
+    const MAX_CREATED_AT: i64 = 4_102_444_800; // 2100-01-01T00:00:00Z
+    if created_at < MIN_CREATED_AT || created_at > MAX_CREATED_AT {
+        return Err(IngestionError::DynamoDb(
+            "invalid created_at timestamp for idempotency record".to_string(),
+        ));
+    }
+
+    // Use checked_add to prevent overflow when computing the TTL.
+    let ttl = created_at.checked_add(86_400).ok_or_else(|| {
+        IngestionError::DynamoDb(
+            "overflow when computing TTL for idempotency record".to_string(),
+        )
+    })?;
+
     let record = IdempotencyRecord {
         pk: IdempotencyRecord::pk_for(idempotency_key),
         event_id: event_id.to_string(),
         created_at,
-        ttl: created_at + 86_400,
+        ttl,
     };
 
     let item = serde_dynamo::aws_sdk_dynamodb_1::to_item(&record)
@@ -171,7 +188,7 @@ mod tests {
     #[test]
     fn event_id_has_evt_prefix() {
         // nanoid-generated IDs must always carry the `evt_` prefix so that
-        // downstream systems (worker, logs, dashboards) can recognise them.
+        // downstream systems (worker, logs, dashboards) can recognize them.
         let event_id = format!("evt_{}", nanoid::nanoid!(21));
         assert!(
             event_id.starts_with("evt_"),
