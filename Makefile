@@ -1,19 +1,18 @@
-.PHONY: package-rust-lambdas build-IngestionFunction build-WorkerFunction
+.PHONY: build-rust-binaries package-ingestion package-worker build-IngestionFunction build-WorkerFunction
 
-package-rust-lambdas:
+build-rust-binaries:
 	cargo build --release -p ingestion -p worker
+
+package-ingestion: build-rust-binaries
 	mkdir -p "$(ARTIFACTS_DIR)"
-	cp "target/release/ingestion" "$(ARTIFACTS_DIR)/ingestion"
-	cp "target/release/worker" "$(ARTIFACTS_DIR)/worker"
-	printf '%s\n' '#!/bin/sh' \
-		'case "$$AWS_LAMBDA_FUNCTION_NAME" in' \
-		'  *worker*) exec /var/task/worker ;;' \
-		'  *) exec /var/task/ingestion ;;' \
-		'esac' > "$(ARTIFACTS_DIR)/bootstrap"
+	cp "target/release/ingestion" "$(ARTIFACTS_DIR)/bootstrap"
 	chmod +x "$(ARTIFACTS_DIR)/bootstrap"
-	chmod +x "$(ARTIFACTS_DIR)/ingestion"
-	chmod +x "$(ARTIFACTS_DIR)/worker"
 
-build-IngestionFunction: package-rust-lambdas
+package-worker: build-rust-binaries
+	mkdir -p "$(ARTIFACTS_DIR)"
+	cp "target/release/worker" "$(ARTIFACTS_DIR)/bootstrap"
+	chmod +x "$(ARTIFACTS_DIR)/bootstrap"
 
-build-WorkerFunction: package-rust-lambdas
+build-IngestionFunction: package-ingestion
+
+build-WorkerFunction: package-worker
