@@ -1,5 +1,5 @@
 [package]
-name = "worker"
+name = "ingestion"
 version = "0.1.0"
 edition = "2024"
 
@@ -13,21 +13,19 @@ thiserror = "2.0"
 
 # logging
 tracing = "0.1"
-tracing-subscriber = "0.3"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # async
 tokio = { version = "1", features = ["full"] }
 
-#aws-sdk
+# web framework
+axum = "0.8"
+
+# aws-sdk
 aws-config = "1.8.14"
 aws-sdk-dynamodb = "1"
-aws-sdk-sqs = "1.95.0"
+aws-sdk-sqs = "1.94.0"
 serde_dynamo = { version = "4", features = ["aws-sdk-dynamodb+1"] }
 
-# HTTP client
-reqwest = "0.13"
-
-# cryptography
-hmac = "0.12.1"
-sha2 = "0.10.9"
-hex = "0.4.3"
+# unique ID generation
+nanoid = "0.4"

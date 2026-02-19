@@ -1,0 +1,317 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  HooRay-Relay — production-grade webhook delivery system.
+  Provisions all shared infrastructure: DynamoDB tables, SQS queue + DLQ,
+  and Lambda function placeholders for both the ingestion and worker crates.
+
+# ---------------------------------------------------------------------------
+# Parameters — override at deploy time with --parameter-overrides
+# ---------------------------------------------------------------------------
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment environment (used as a suffix on resource names and metric dimension).
+
+  SqsVisibilityTimeoutSeconds:
+    Type: Number
+    Default: 60
+    Description: >
+      How long (seconds) a message is hidden from other consumers after being
+      received.  Must be >= the maximum expected Lambda execution time.
+
+  SqsMaxReceiveCount:
+    Type: Number
+    Default: 4
+    Description: >
+      Maximum number of times a message is delivered before being moved to the
+      DLQ.  Set to max_retries + 1 (initial attempt counts as 1).
+
+# ---------------------------------------------------------------------------
+# Globals — applied to all SAM functions
+# ---------------------------------------------------------------------------
+Globals:
+  Function:
+    Runtime: provided.al2023   # Amazon Linux 2023 — required for Rust Lambdas
+    Architectures: [arm64]     # Graviton2: cheaper + faster for Rust workloads
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref Environment
+        EVENTS_TABLE: !Ref WebhookEventsTable
+        IDEMPOTENCY_TABLE: !Ref WebhookIdempotencyTable
+        CONFIGS_TABLE: !Ref WebhookConfigsTable
+        QUEUE_URL: !Ref WebhookDeliveryQueue
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # -------------------------------------------------------------------------
+  # DynamoDB Table 1: webhook_events
+  # Owned by: both engineers (Eng1 writes, Eng2 reads/updates)
+  # -------------------------------------------------------------------------
+  WebhookEventsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "webhook_events_${Environment}"
+      BillingMode: PAY_PER_REQUEST   # on-demand — no capacity planning for MVP
+      # Primary key
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        # GSI1 attributes (retry queue — reserved for Week 2)
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      # GSI1: query events ready for retry by timestamp
+      # GSI1PK = "RETRY", GSI1SK = "NEXT#{timestamp}#EVENT#{event_id}"
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1-retry-index
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      # 30-day auto-expiry of old event records
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: shared
+
+  # -------------------------------------------------------------------------
+  # DynamoDB Table 2: webhook_idempotency
+  # Owned by: Engineer 1 (ingestion layer)
+  # -------------------------------------------------------------------------
+  WebhookIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "webhook_idempotency_${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+      # 24-hour auto-expiry — DynamoDB TTL handles cleanup, no Lambda needed
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: engineer1
+
+  # -------------------------------------------------------------------------
+  # DynamoDB Table 3: webhook_configs
+  # Owned by: Engineer 1 (config CRUD) — read by Engineer 2 (delivery)
+  # -------------------------------------------------------------------------
+  WebhookConfigsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "webhook_configs_${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: engineer1
+
+  # -------------------------------------------------------------------------
+  # SQS: Dead-Letter Queue
+  # Messages land here when max_receive_count is exceeded.
+  # Engineer 2 owns the alarm; shared infra definition.
+  # -------------------------------------------------------------------------
+  WebhookDeliveryDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "webhook_delivery_dlq_${Environment}"
+      # Retain failed messages for 14 days for investigation
+      MessageRetentionPeriod: 1209600
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+
+  # -------------------------------------------------------------------------
+  # SQS: Main delivery queue
+  # Engineer 1 enqueues; Engineer 2 polls.
+  # -------------------------------------------------------------------------
+  WebhookDeliveryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "webhook_delivery_${Environment}"
+      VisibilityTimeout: !Ref SqsVisibilityTimeoutSeconds
+      # Retain unprocessed messages for 4 days
+      MessageRetentionPeriod: 345600
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt WebhookDeliveryDLQ.Arn
+        maxReceiveCount: !Ref SqsMaxReceiveCount
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+
+  # -------------------------------------------------------------------------
+  # CloudWatch Alarm: DLQ depth > 0  (contract item §9)
+  # -------------------------------------------------------------------------
+  DLQDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hooray-relay-dlq-depth-${Environment}"
+      AlarmDescription: "Messages in webhook DLQ — investigate delivery failures"
+      Namespace: AWS/SQS
+      MetricName: ApproximateNumberOfMessagesVisible
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt WebhookDeliveryDLQ.QueueName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  # -------------------------------------------------------------------------
+  # Lambda: Ingestion (Engineer 1)
+  # Placeholder — binary will be provided by `cargo lambda build`
+  # -------------------------------------------------------------------------
+  IngestionFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hooray-relay-ingestion-${Environment}"
+      CodeUri: ingestion/
+      Handler: bootstrap   # Rust Lambda bootstrap binary name
+      Timeout: 30
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookEventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookIdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookConfigsTable
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt WebhookDeliveryQueue.QueueName
+      Events:
+        ReceiveWebhook:
+          Type: Api
+          Properties:
+            Path: /webhooks/receive
+            Method: POST
+        CreateConfig:
+          Type: Api
+          Properties:
+            Path: /webhooks/configs
+            Method: POST
+        GetConfig:
+          Type: Api
+          Properties:
+            Path: /webhooks/configs
+            Method: GET
+
+  # -------------------------------------------------------------------------
+  # Lambda: Worker (Engineer 2)
+  # Placeholder — binary will be provided by `cargo lambda build`
+  # -------------------------------------------------------------------------
+  WorkerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "hooray-relay-worker-${Environment}"
+      CodeUri: worker/
+      Handler: bootstrap
+      Timeout: 55          # Must be < SqsVisibilityTimeoutSeconds
+      MemorySize: 256
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookEventsTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref WebhookConfigsTable
+        - SQSPollerPolicy:
+            QueueName: !GetAtt WebhookDeliveryQueue.QueueName
+      Events:
+        SQSTrigger:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt WebhookDeliveryQueue.Arn
+            BatchSize: 1            # Process one message at a time for MVP
+            FunctionResponseTypes:
+              - ReportBatchItemFailures  # Partial batch failure support
+
+# ---------------------------------------------------------------------------
+# Outputs — referenced by both engineers in local testing and CI
+# ---------------------------------------------------------------------------
+Outputs:
+  EventsTableName:
+    Description: "webhook_events DynamoDB table name"
+    Value: !Ref WebhookEventsTable
+    Export:
+      Name: !Sub "hooray-relay-events-table-${Environment}"
+
+  IdempotencyTableName:
+    Description: "webhook_idempotency DynamoDB table name"
+    Value: !Ref WebhookIdempotencyTable
+    Export:
+      Name: !Sub "hooray-relay-idempotency-table-${Environment}"
+
+  ConfigsTableName:
+    Description: "webhook_configs DynamoDB table name"
+    Value: !Ref WebhookConfigsTable
+    Export:
+      Name: !Sub "hooray-relay-configs-table-${Environment}"
+
+  QueueUrl:
+    Description: "SQS delivery queue URL"
+    Value: !Ref WebhookDeliveryQueue
+    Export:
+      Name: !Sub "hooray-relay-queue-url-${Environment}"
+
+  DLQUrl:
+    Description: "SQS dead-letter queue URL"
+    Value: !Ref WebhookDeliveryDLQ
+    Export:
+      Name: !Sub "hooray-relay-dlq-url-${Environment}"
+
+  IngestionApiUrl:
+    Description: "API Gateway URL for the ingestion Lambda"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"

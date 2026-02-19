@@ -206,6 +206,28 @@ mod tests {
         assert_eq!(event.next_retry_at, None);
     }
     #[test]
+    fn mark_failed_clears_next_retry_and_sets_status_failed() {
+        let created_at = 1_700_000_000_i64;
+        let mut event = Event::new(
+            "event-1".to_string(),
+            "customer-1".to_string(),
+            "payload".to_string(),
+            created_at,
+        );
+
+        // Put the event into a retry-scheduled state first.
+        let retry_at = created_at + 60;
+        event.mark_retry_scheduled(retry_at);
+        assert_eq!(event.status, EventStatus::Pending);
+        assert_eq!(event.next_retry_at, Some(retry_at));
+
+        // Now mark the event as failed and verify terminal state.
+        event.mark_failed();
+        assert_eq!(event.status, EventStatus::Failed);
+        assert_eq!(event.next_retry_at, None);
+    }
+
+    #[test]
     fn event_serialization_round_trip() {
         let event = Event::new(
             "evt_123".to_string(),

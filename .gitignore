@@ -1,0 +1,15 @@
+# Rust build artifacts
+target/
+
+# Cargo lock files are committed for binaries, not libraries
+# Uncomment if this were a library crate:
+# Cargo.lock
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
