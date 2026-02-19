@@ -218,6 +218,8 @@ Resources:
   # -------------------------------------------------------------------------
   IngestionFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: !Sub "hooray-relay-ingestion-${Environment}"
       CodeUri: .
@@ -256,6 +258,8 @@ Resources:
   # -------------------------------------------------------------------------
   WorkerFunction:
     Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: makefile
     Properties:
       FunctionName: !Sub "hooray-relay-worker-${Environment}"
       CodeUri: .
