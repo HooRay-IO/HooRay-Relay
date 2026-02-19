@@ -149,35 +149,43 @@ mod tests {
             .collect();
 
         for (k, v) in vars {
-            std::env::set_var(k, v);
+            // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+            unsafe { std::env::set_var(k, v) };
         }
 
         f();
 
         for (k, original) in originals {
             match original {
-                Some(v) => std::env::set_var(k, v),
-                None => std::env::remove_var(k),
+                Some(v) => {
+                    // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+                    unsafe { std::env::set_var(k, v) };
+                }
+                None => {
+                    // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+                    unsafe { std::env::remove_var(k) };
+                }
             }
         }
     }
 
     // Remove a list of vars, run a closure, then restore whatever was there.
-    fn without_env_vars<F: FnOnce()>(keys: &[&str], f: F) {
-        let _guard = env_lock().lock().unwrap();
-
+    // Caller must already hold `ENV_MUTEX`.
+    fn without_env_vars_locked<F: FnOnce()>(keys: &[&str], f: F) {
         let originals: Vec<(&str, Option<String>)> =
             keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
 
         for k in keys {
-            std::env::remove_var(k);
+            // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+            unsafe { std::env::remove_var(k) };
         }
 
         f();
 
         for (k, original) in originals {
             if let Some(v) = original {
-                std::env::set_var(k, v);
+                // SAFETY: tests serialize all env access through `ENV_MUTEX`.
+                unsafe { std::env::set_var(k, v) };
             }
         }
     }
@@ -189,14 +197,20 @@ mod tests {
                 (ENV_EVENTS_TABLE, "webhook_events_test"),
                 (ENV_IDEMPOTENCY_TABLE, "webhook_idempotency_test"),
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
                 let cfg = AppConfig::from_env().expect("should succeed with all vars set");
                 assert_eq!(cfg.events_table, "webhook_events_test");
                 assert_eq!(cfg.idempotency_table, "webhook_idempotency_test");
                 assert_eq!(cfg.configs_table, "webhook_configs_test");
-                assert_eq!(cfg.queue_url, "https://sqs.us-east-1.amazonaws.com/123/test");
+                assert_eq!(
+                    cfg.queue_url,
+                    "https://sqs.us-east-1.amazonaws.com/123/test"
+                );
             },
         );
     }
@@ -207,10 +221,13 @@ mod tests {
             &[
                 (ENV_IDEMPOTENCY_TABLE, "webhook_idempotency_test"),
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
-                without_env_vars(&[ENV_EVENTS_TABLE], || {
+                without_env_vars_locked(&[ENV_EVENTS_TABLE], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_EVENTS_TABLE),
@@ -227,10 +244,13 @@ mod tests {
             &[
                 (ENV_EVENTS_TABLE, "webhook_events_test"),
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
-                without_env_vars(&[ENV_IDEMPOTENCY_TABLE], || {
+                without_env_vars_locked(&[ENV_IDEMPOTENCY_TABLE], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_IDEMPOTENCY_TABLE),
@@ -247,10 +267,13 @@ mod tests {
             &[
                 (ENV_EVENTS_TABLE, "webhook_events_test"),
                 (ENV_IDEMPOTENCY_TABLE, "webhook_idempotency_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
-                without_env_vars(&[ENV_CONFIGS_TABLE], || {
+                without_env_vars_locked(&[ENV_CONFIGS_TABLE], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_CONFIGS_TABLE),
@@ -270,7 +293,7 @@ mod tests {
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
             ],
             || {
-                without_env_vars(&[ENV_QUEUE_URL], || {
+                without_env_vars_locked(&[ENV_QUEUE_URL], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_QUEUE_URL),

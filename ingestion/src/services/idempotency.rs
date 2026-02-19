@@ -63,9 +63,9 @@ pub async fn check_and_record(
 ) -> Result<IdempotencyOutcome, IngestionError> {
     // Validate created_at is within a reasonable Unix timestamp range
     // (between 2000-01-01 and 2100-01-01) to avoid invalid TTLs.
-    const MIN_CREATED_AT: i64 = 946_684_800;  // 2000-01-01T00:00:00Z
+    const MIN_CREATED_AT: i64 = 946_684_800; // 2000-01-01T00:00:00Z
     const MAX_CREATED_AT: i64 = 4_102_444_800; // 2100-01-01T00:00:00Z
-    if created_at < MIN_CREATED_AT || created_at > MAX_CREATED_AT {
+    if !(MIN_CREATED_AT..=MAX_CREATED_AT).contains(&created_at) {
         return Err(IngestionError::DynamoDb(
             "invalid created_at timestamp for idempotency record".to_string(),
         ));
@@ -73,9 +73,7 @@ pub async fn check_and_record(
 
     // Use checked_add to prevent overflow when computing the TTL.
     let ttl = created_at.checked_add(86_400).ok_or_else(|| {
-        IngestionError::DynamoDb(
-            "overflow when computing TTL for idempotency record".to_string(),
-        )
+        IngestionError::DynamoDb("overflow when computing TTL for idempotency record".to_string())
     })?;
 
     let record = IdempotencyRecord {
@@ -104,7 +102,10 @@ pub async fn check_and_record(
 
     match result {
         Ok(_) => {
-            info!(idempotency_key, event_id, "idempotency key recorded — new event");
+            info!(
+                idempotency_key,
+                event_id, "idempotency key recorded — new event"
+            );
             Ok(IdempotencyOutcome::New)
         }
         Err(ref e) if is_conditional_check_failed(e) => {
@@ -112,8 +113,7 @@ pub async fn check_and_record(
                 idempotency_key,
                 "duplicate idempotency key detected — fetching existing event_id"
             );
-            let existing_event_id =
-                get_existing_event_id(client, table, idempotency_key).await?;
+            let existing_event_id = get_existing_event_id(client, table, idempotency_key).await?;
             Ok(IdempotencyOutcome::Duplicate {
                 event_id: existing_event_id,
             })
@@ -163,9 +163,7 @@ pub async fn get_existing_event_id(
 
 /// Returns `true` when a DynamoDB `PutItem` error is a
 /// `ConditionalCheckFailedException` — indicating the item already exists.
-pub fn is_conditional_check_failed(
-    err: &SdkError<PutItemError>,
-) -> bool {
+pub fn is_conditional_check_failed(err: &SdkError<PutItemError>) -> bool {
     matches!(
         err,
         SdkError::ServiceError(svc) if matches!(
@@ -200,10 +198,7 @@ mod tests {
     fn event_id_minimum_length() {
         // `evt_` (4) + at least 8 random chars = 12 minimum.
         let event_id = format!("evt_{}", nanoid::nanoid!(21));
-        assert!(
-            event_id.len() >= 12,
-            "event_id too short: {event_id}"
-        );
+        assert!(event_id.len() >= 12, "event_id too short: {event_id}");
     }
 
     #[test]
@@ -234,6 +229,10 @@ mod tests {
             ttl: 1_707_840_000 + 86_400,
         };
         let item = serde_dynamo::aws_sdk_dynamodb_1::to_item(&record);
-        assert!(item.is_ok(), "serialization should succeed: {:?}", item.err());
+        assert!(
+            item.is_ok(),
+            "serialization should succeed: {:?}",
+            item.err()
+        );
     }
 }
