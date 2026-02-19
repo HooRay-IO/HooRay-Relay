@@ -220,7 +220,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "hooray-relay-ingestion-${Environment}"
-      CodeUri: ingestion/
+      CodeUri: .
       Handler: bootstrap   # Rust Lambda bootstrap binary name
       Timeout: 30
       MemorySize: 256
@@ -258,7 +258,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       FunctionName: !Sub "hooray-relay-worker-${Environment}"
-      CodeUri: worker/
+      CodeUri: .
       Handler: bootstrap
       Timeout: 55          # Must be < SqsVisibilityTimeoutSeconds
       MemorySize: 256
