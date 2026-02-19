@@ -189,14 +189,20 @@ mod tests {
                 (ENV_EVENTS_TABLE, "webhook_events_test"),
                 (ENV_IDEMPOTENCY_TABLE, "webhook_idempotency_test"),
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
                 let cfg = AppConfig::from_env().expect("should succeed with all vars set");
                 assert_eq!(cfg.events_table, "webhook_events_test");
                 assert_eq!(cfg.idempotency_table, "webhook_idempotency_test");
                 assert_eq!(cfg.configs_table, "webhook_configs_test");
-                assert_eq!(cfg.queue_url, "https://sqs.us-east-1.amazonaws.com/123/test");
+                assert_eq!(
+                    cfg.queue_url,
+                    "https://sqs.us-east-1.amazonaws.com/123/test"
+                );
             },
         );
     }
@@ -207,7 +213,10 @@ mod tests {
             &[
                 (ENV_IDEMPOTENCY_TABLE, "webhook_idempotency_test"),
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
                 without_env_vars(&[ENV_EVENTS_TABLE], || {
@@ -227,7 +236,10 @@ mod tests {
             &[
                 (ENV_EVENTS_TABLE, "webhook_events_test"),
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
                 without_env_vars(&[ENV_IDEMPOTENCY_TABLE], || {
@@ -247,7 +259,10 @@ mod tests {
             &[
                 (ENV_EVENTS_TABLE, "webhook_events_test"),
                 (ENV_IDEMPOTENCY_TABLE, "webhook_idempotency_test"),
-                (ENV_QUEUE_URL, "https://sqs.us-east-1.amazonaws.com/123/test"),
+                (
+                    ENV_QUEUE_URL,
+                    "https://sqs.us-east-1.amazonaws.com/123/test",
+                ),
             ],
             || {
                 without_env_vars(&[ENV_CONFIGS_TABLE], || {

@@ -265,16 +265,13 @@ impl DynamoDbService {
                 );
         }
 
-        request
-            .send()
-            .await
-            .map_err(|e| {
-                error!(error = %e, "failed to update event status");
-                WorkerError::DynamoDb(format!(
-                    "Failed to update event status for event_id {}: {}",
-                    event.event_id, e
-                ))
-            })?;
+        request.send().await.map_err(|e| {
+            error!(error = %e, "failed to update event status");
+            WorkerError::DynamoDb(format!(
+                "Failed to update event status for event_id {}: {}",
+                event.event_id, e
+            ))
+        })?;
 
         info!(status = ?event.status, "updated event status");
         Ok(())

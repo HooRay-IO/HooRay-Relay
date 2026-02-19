@@ -89,7 +89,7 @@ impl WebhookReceiveRequest {
         Ok(())
     }
 
-   fn validate_customer_id(customer_id: &str) -> Result<(), WebhookValidationError> {
+    fn validate_customer_id(customer_id: &str) -> Result<(), WebhookValidationError> {
         if customer_id.is_empty() {
             return Err(WebhookValidationError::InvalidCustomerId {
                 reason: "must not be empty".to_string(),
@@ -100,18 +100,15 @@ impl WebhookReceiveRequest {
             .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
         {
             return Err(WebhookValidationError::InvalidCustomerId {
-                reason:
-                    "must contain only ASCII letters, digits, '.', '_' or '-'".to_string(),
+                reason: "must contain only ASCII letters, digits, '.', '_' or '-'".to_string(),
             });
         }
         Ok(())
     }
 
-    fn validate_data_size(
-        data: &serde_json::Value,
-    ) -> Result<(), WebhookValidationError> {
-        let bytes = serde_json::to_vec(data)
-            .map_err(WebhookValidationError::DataSerializationFailed)?;
+    fn validate_data_size(data: &serde_json::Value) -> Result<(), WebhookValidationError> {
+        let bytes =
+            serde_json::to_vec(data).map_err(WebhookValidationError::DataSerializationFailed)?;
         let size = bytes.len();
         if size > MAX_JSON_PAYLOAD_BYTES {
             return Err(WebhookValidationError::DataTooLarge {
@@ -544,10 +541,7 @@ mod tests {
 
     #[test]
     fn idempotency_record_pk_matches_dynamodb_contract() {
-        assert_eq!(
-            IdempotencyRecord::pk_for("req_abc123"),
-            "IDEM#req_abc123"
-        );
+        assert_eq!(IdempotencyRecord::pk_for("req_abc123"), "IDEM#req_abc123");
     }
 
     #[test]
