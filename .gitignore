@@ -13,3 +13,24 @@ target/
 .idea/
 *.swp
 *.swo
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Logs and runtime dumps
+*.log
+*.out
+*.err
+
+# Windows
+Thumbs.db
+
+# Test and coverage artifacts
+coverage/
+*.profraw
+*.profdata
+
+# Lambda/SAM local artifacts
+.aws-sam/
