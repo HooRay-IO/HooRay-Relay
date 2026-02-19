@@ -2,6 +2,7 @@
 
 build-rust-binaries:
 	cargo build --release -p ingestion -p worker
+	rm -rf "$(ARTIFACTS_DIR)"
 
 package-ingestion: build-rust-binaries
 	mkdir -p "$(ARTIFACTS_DIR)"
