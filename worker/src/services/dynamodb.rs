@@ -289,19 +289,22 @@ impl DynamoDbService {
             .table_name(&self.webhook_events_table)
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
-            .update_expression("ADD attempt_count :inc")
-            .expression_attribute_values(":inc", AttributeValue::N("1".to_string()))
+            .update_expression("SET attempt_count = :attempt_count")
+            .expression_attribute_values(
+                ":attempt_count",
+                AttributeValue::N(event.attempt_count.to_string()),
+            )
             .send()
             .await
             .map_err(|e| {
-                error!(error = %e, "failed to increment attempt count");
+                error!(error = %e, "failed to update attempt count");
                 WorkerError::DynamoDb(format!(
-                    "Failed to increment attempt count for event_id {}: {}",
+                    "Failed to update attempt count for event_id {}: {}",
                     event.event_id, e
                 ))
             })?;
 
-        info!("incremented attempt count");
+        info!("updated attempt count");
         Ok(())
     }
 }
