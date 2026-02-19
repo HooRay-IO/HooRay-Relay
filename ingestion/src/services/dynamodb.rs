@@ -170,9 +170,8 @@ mod tests {
     }
 
     // Remove a list of vars, run a closure, then restore whatever was there.
-    fn without_env_vars<F: FnOnce()>(keys: &[&str], f: F) {
-        let _guard = env_lock().lock().unwrap();
-
+    // Caller must already hold `ENV_MUTEX`.
+    fn without_env_vars_locked<F: FnOnce()>(keys: &[&str], f: F) {
         let originals: Vec<(&str, Option<String>)> =
             keys.iter().map(|k| (*k, std::env::var(k).ok())).collect();
 
@@ -228,7 +227,7 @@ mod tests {
                 ),
             ],
             || {
-                without_env_vars(&[ENV_EVENTS_TABLE], || {
+                without_env_vars_locked(&[ENV_EVENTS_TABLE], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_EVENTS_TABLE),
@@ -251,7 +250,7 @@ mod tests {
                 ),
             ],
             || {
-                without_env_vars(&[ENV_IDEMPOTENCY_TABLE], || {
+                without_env_vars_locked(&[ENV_IDEMPOTENCY_TABLE], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_IDEMPOTENCY_TABLE),
@@ -274,7 +273,7 @@ mod tests {
                 ),
             ],
             || {
-                without_env_vars(&[ENV_CONFIGS_TABLE], || {
+                without_env_vars_locked(&[ENV_CONFIGS_TABLE], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_CONFIGS_TABLE),
@@ -294,7 +293,7 @@ mod tests {
                 (ENV_CONFIGS_TABLE, "webhook_configs_test"),
             ],
             || {
-                without_env_vars(&[ENV_QUEUE_URL], || {
+                without_env_vars_locked(&[ENV_QUEUE_URL], || {
                     let err = AppConfig::from_env().expect_err("should fail");
                     assert!(
                         matches!(err, IngestionError::MissingField(ref k) if k == ENV_QUEUE_URL),
