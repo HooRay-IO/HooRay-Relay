@@ -86,7 +86,7 @@ axum = "0.8"                            # ← ingestion-only; worker has no HTTP
 # AWS SDKs — identical versions to worker/ to keep the lock-file in sync
 aws-config        = "1.8.14"
 aws-sdk-dynamodb  = "1"
-aws-sdk-sqs       = "1.94.0"
+aws-sdk-sqs       = "1.95.0"
 serde_dynamo      = { version = "4", features = ["aws-sdk-dynamodb+1"] }
 
 # nanoid — generates evt_… event IDs
@@ -103,7 +103,7 @@ nanoid = "0.4"                          # ← ingestion-only; worker only reads 
 | `tokio` | `1` (full) | `1` (full) |
 | `aws-config` | `1.8.14` | `1.8.14` |
 | `aws-sdk-dynamodb` | `1` | `1` |
-| `aws-sdk-sqs` | `1.94.0` | `1.94.0` |
+| `aws-sdk-sqs` | `1.95.0` | `1.95.0` |
 | `serde_dynamo` | `4` + feature | `4` + feature |
 
 Both crates resolve to the same dependency graph for the shared AWS SDK crates,
