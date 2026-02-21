@@ -349,6 +349,77 @@ mod tests {
         }
     }
 
+    struct CleanupItem {
+        table: String,
+        pk: String,
+        sk: String,
+    }
+
+    struct CleanupGuard {
+        client: Client,
+        items: Vec<CleanupItem>,
+    }
+
+    impl CleanupGuard {
+        fn new(client: Client) -> Self {
+            Self {
+                client,
+                items: Vec::new(),
+            }
+        }
+
+        fn track(&mut self, table: &str, pk: &str, sk: &str) {
+            self.items.push(CleanupItem {
+                table: table.to_string(),
+                pk: pk.to_string(),
+                sk: sk.to_string(),
+            });
+        }
+    }
+
+    impl Drop for CleanupGuard {
+        fn drop(&mut self) {
+            if self.items.is_empty() {
+                return;
+            }
+
+            let client = self.client.clone();
+            let items = std::mem::take(&mut self.items);
+            let join_handle = std::thread::spawn(move || {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build();
+
+                let Ok(runtime) = runtime else {
+                    eprintln!("cleanup guard: failed to build Tokio runtime");
+                    return;
+                };
+
+                runtime.block_on(async move {
+                    for item in items.into_iter().rev() {
+                        if let Err(err) = client
+                            .delete_item()
+                            .table_name(&item.table)
+                            .key("pk", AttributeValue::S(item.pk))
+                            .key("sk", AttributeValue::S(item.sk))
+                            .send()
+                            .await
+                        {
+                            eprintln!(
+                                "cleanup guard: failed to delete {}/{} from {}: {}",
+                                "pk", "sk", item.table, err
+                            );
+                        }
+                    }
+                });
+            });
+
+            if join_handle.join().is_err() {
+                eprintln!("cleanup guard: cleanup thread panicked");
+            }
+        }
+    }
+
     #[tokio::test]
     #[ignore = "requires AWS credentials, network access, and DynamoDB tables from env"]
     async fn validates_attempt_recording_and_event_updates() {
@@ -372,6 +443,7 @@ mod tests {
         let client = Client::new(&shared_config);
         let service =
             DynamoDbService::new(client.clone(), events_table.clone(), configs_table.clone());
+        let mut cleanup = CleanupGuard::new(client.clone());
 
         client
             .put_item()
@@ -393,6 +465,7 @@ mod tests {
             .send()
             .await
             .expect("seed event put-item should succeed");
+        cleanup.track(&events_table, &event_pk, Event::metadata_sk());
 
         client
             .put_item()
@@ -416,6 +489,7 @@ mod tests {
             .send()
             .await
             .expect("seed config put-item should succeed");
+        cleanup.track(&configs_table, &config_pk, WebhookConfig::sk());
 
         let config = service
             .get_config(&customer_id)
@@ -487,6 +561,7 @@ mod tests {
             .record_attempt(attempt)
             .await
             .expect("record_attempt should create attempt item");
+        cleanup.track(&events_table, &event_pk, &Event::attempt_sk(1));
 
         let attempt_item = client
             .get_item()
@@ -503,30 +578,5 @@ mod tests {
         assert_eq!(attr_n_i64(&attempt_item, "attempted_at"), ts_now + 5);
         assert_eq!(attr_n_u32(&attempt_item, "http_status") as u16, 500u16);
         assert_eq!(attr_s(&attempt_item, "error_message"), "validation failure");
-
-        client
-            .delete_item()
-            .table_name(&events_table)
-            .key("pk", AttributeValue::S(event_pk.clone()))
-            .key("sk", AttributeValue::S(Event::metadata_sk().to_string()))
-            .send()
-            .await
-            .expect("cleanup metadata item should succeed");
-        client
-            .delete_item()
-            .table_name(&events_table)
-            .key("pk", AttributeValue::S(event_pk))
-            .key("sk", AttributeValue::S(Event::attempt_sk(1)))
-            .send()
-            .await
-            .expect("cleanup attempt item should succeed");
-        client
-            .delete_item()
-            .table_name(&configs_table)
-            .key("pk", AttributeValue::S(config_pk))
-            .key("sk", AttributeValue::S(WebhookConfig::sk().to_string()))
-            .send()
-            .await
-            .expect("cleanup config item should succeed");
     }
 }

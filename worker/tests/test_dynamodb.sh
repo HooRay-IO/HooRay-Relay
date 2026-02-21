@@ -16,6 +16,45 @@ EVENT_PK="EVENT#${EVENT_ID}"
 EVENT_SK="v0"
 CONFIG_PK="CUSTOMER#${CUSTOMER_ID}"
 CONFIG_SK="CONFIG"
+KEEP_TEST_DATA="${KEEP_TEST_DATA:-false}"
+EVENT_WRITTEN=false
+CONFIG_WRITTEN=false
+
+cleanup() {
+  local exit_code=$?
+  set +e
+
+  if [[ "$KEEP_TEST_DATA" == "true" ]]; then
+    echo "[CLEANUP] KEEP_TEST_DATA=true, skipping item deletion"
+    return "$exit_code"
+  fi
+
+  if [[ "$EVENT_WRITTEN" == "true" ]]; then
+    echo "[CLEANUP] Deleting test event from ${WEBHOOK_EVENTS_TABLE}"
+    aws dynamodb delete-item \
+      --region "$AWS_REGION" \
+      --table-name "$WEBHOOK_EVENTS_TABLE" \
+      --key "{\"pk\":{\"S\":\"${EVENT_PK}\"},\"sk\":{\"S\":\"${EVENT_SK}\"}}" \
+      >/dev/null 2>&1 || echo "[CLEANUP] WARN: failed to delete event item"
+  fi
+
+  if [[ "$CONFIG_WRITTEN" == "true" ]]; then
+    echo "[CLEANUP] Deleting test config from ${WEBHOOK_CONFIGS_TABLE}"
+    aws dynamodb delete-item \
+      --region "$AWS_REGION" \
+      --table-name "$WEBHOOK_CONFIGS_TABLE" \
+      --key "{\"pk\":{\"S\":\"${CONFIG_PK}\"},\"sk\":{\"S\":\"${CONFIG_SK}\"}}" \
+      >/dev/null 2>&1 || echo "[CLEANUP] WARN: failed to delete config item"
+  fi
+
+  if [[ "$EVENT_WRITTEN" == "true" || "$CONFIG_WRITTEN" == "true" ]]; then
+    echo "[CLEANUP] Completed cleanup (exit_code=${exit_code})"
+  fi
+
+  return "$exit_code"
+}
+
+trap cleanup EXIT INT TERM
 
 echo "[1/4] Writing test event to ${WEBHOOK_EVENTS_TABLE}"
 aws dynamodb put-item \
@@ -32,6 +71,7 @@ aws dynamodb put-item \
     \"attempt_count\": {\"N\": \"0\"},
     \"created_at\": {\"N\": \"${TS_NOW}\"}
   }"
+EVENT_WRITTEN=true
 
 echo "[2/4] Writing test config to ${WEBHOOK_CONFIGS_TABLE}"
 aws dynamodb put-item \
@@ -49,6 +89,7 @@ aws dynamodb put-item \
     \"created_at\": {\"N\": \"${TS_NOW}\"},
     \"updated_at\": {\"N\": \"${TS_NOW}\"}
   }"
+CONFIG_WRITTEN=true
 
 echo "[3/4] Fetching event by pk/sk"
 EVENT_ID_FETCHED="$(aws dynamodb get-item \
@@ -80,17 +121,3 @@ fi
 
 echo "SUCCESS: DynamoDB test data created and fetch verified"
 echo "EVENT_ID=${EVENT_ID} CUSTOMER_ID=${CUSTOMER_ID}"
-
-echo "[CLEANUP] Deleting test event from ${WEBHOOK_EVENTS_TABLE}"
-aws dynamodb delete-item \
-  --region "$AWS_REGION" \
-  --table-name "$WEBHOOK_EVENTS_TABLE" \
-  --key "{\"pk\":{\"S\":\"${EVENT_PK}\"},\"sk\":{\"S\":\"${EVENT_SK}\"}}"
-
-echo "[CLEANUP] Deleting test config from ${WEBHOOK_CONFIGS_TABLE}"
-aws dynamodb delete-item \
-  --region "$AWS_REGION" \
-  --table-name "$WEBHOOK_CONFIGS_TABLE" \
-  --key "{\"pk\":{\"S\":\"${CONFIG_PK}\"},\"sk\":{\"S\":\"${CONFIG_SK}\"}}"
-
-echo "CLEANUP: Test items deleted from DynamoDB tables"
