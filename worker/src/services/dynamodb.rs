@@ -305,3 +305,206 @@ impl DynamoDbService {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aws_config::BehaviorVersion;
+    use std::env;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn must_env(name: &str) -> String {
+        env::var(name).unwrap_or_else(|_| panic!("{} must be set for integration test", name))
+    }
+
+    fn now_unix_secs() -> i64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock is before unix epoch")
+            .as_secs() as i64
+    }
+
+    fn attr_s(item: &HashMap<String, AttributeValue>, key: &str) -> String {
+        match item.get(key) {
+            Some(AttributeValue::S(value)) => value.clone(),
+            _ => panic!("missing or invalid string attr: {}", key),
+        }
+    }
+
+    fn attr_n_u32(item: &HashMap<String, AttributeValue>, key: &str) -> u32 {
+        match item.get(key) {
+            Some(AttributeValue::N(value)) => value.parse::<u32>().expect("invalid u32 number attr"),
+            _ => panic!("missing or invalid number attr: {}", key),
+        }
+    }
+
+    fn attr_n_i64(item: &HashMap<String, AttributeValue>, key: &str) -> i64 {
+        match item.get(key) {
+            Some(AttributeValue::N(value)) => value.parse::<i64>().expect("invalid i64 number attr"),
+            _ => panic!("missing or invalid number attr: {}", key),
+        }
+    }
+
+    #[tokio::test]
+    #[ignore = "requires AWS credentials, network access, and DynamoDB tables from env"]
+    async fn validates_attempt_recording_and_event_updates() {
+        let events_table = must_env("WEBHOOK_EVENTS_TABLE");
+        let configs_table = must_env("WEBHOOK_CONFIGS_TABLE");
+        let _region = must_env("AWS_REGION");
+        let ts_now = now_unix_secs();
+        let unique = format!(
+            "{}",
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("clock is before unix epoch")
+                .as_millis()
+        );
+        let event_id = format!("evt_service_test_{}", unique);
+        let customer_id = format!("cust_service_test_{}", unique);
+        let event_pk = format!("EVENT#{}", event_id);
+        let config_pk = format!("CUSTOMER#{}", customer_id);
+
+        let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
+        let client = Client::new(&shared_config);
+        let service = DynamoDbService::new(client.clone(), events_table.clone(), configs_table.clone());
+
+        client
+            .put_item()
+            .table_name(&events_table)
+            .condition_expression("attribute_not_exists(pk) AND attribute_not_exists(sk)")
+            .item("pk", AttributeValue::S(event_pk.clone()))
+            .item("sk", AttributeValue::S(Event::metadata_sk().to_string()))
+            .item("event_id", AttributeValue::S(event_id.clone()))
+            .item("customer_id", AttributeValue::S(customer_id.clone()))
+            .item(
+                "payload",
+                AttributeValue::S("{\"order_id\":\"ord_service_test\",\"amount\":42.0}".to_string()),
+            )
+            .item("status", AttributeValue::S("pending".to_string()))
+            .item("attempt_count", AttributeValue::N("0".to_string()))
+            .item("created_at", AttributeValue::N(ts_now.to_string()))
+            .send()
+            .await
+            .expect("seed event put-item should succeed");
+
+        client
+            .put_item()
+            .table_name(&configs_table)
+            .condition_expression("attribute_not_exists(pk) AND attribute_not_exists(sk)")
+            .item("pk", AttributeValue::S(config_pk.clone()))
+            .item("sk", AttributeValue::S(WebhookConfig::sk().to_string()))
+            .item("customer_id", AttributeValue::S(customer_id.clone()))
+            .item(
+                "url",
+                AttributeValue::S("https://webhook.site/service-test".to_string()),
+            )
+            .item("secret", AttributeValue::S("whsec_service_test".to_string()))
+            .item("max_retries", AttributeValue::N("3".to_string()))
+            .item("active", AttributeValue::Bool(true))
+            .item("created_at", AttributeValue::N(ts_now.to_string()))
+            .item("updated_at", AttributeValue::N(ts_now.to_string()))
+            .send()
+            .await
+            .expect("seed config put-item should succeed");
+
+        let mut event = service
+            .get_event(&event_id)
+            .await
+            .expect("get_event should return seeded event");
+        assert_eq!(event.attempt_count, 0);
+
+        event.attempt_count = 1;
+        service
+            .increment_attempt_count(&event)
+            .await
+            .expect("increment_attempt_count should update attempt_count");
+
+        let event_after_count = client
+            .get_item()
+            .table_name(&events_table)
+            .consistent_read(true)
+            .key("pk", AttributeValue::S(event_pk.clone()))
+            .key("sk", AttributeValue::S(Event::metadata_sk().to_string()))
+            .send()
+            .await
+            .expect("get_item should read updated event")
+            .item
+            .expect("event item should exist");
+        assert_eq!(attr_n_u32(&event_after_count, "attempt_count"), 1);
+
+        event.status = EventStatus::Failed;
+        event.next_retry_at = Some(ts_now + 60);
+        service
+            .update_event_status(&event)
+            .await
+            .expect("update_event_status should update status fields");
+
+        let event_after_status = client
+            .get_item()
+            .table_name(&events_table)
+            .consistent_read(true)
+            .key("pk", AttributeValue::S(event_pk.clone()))
+            .key("sk", AttributeValue::S(Event::metadata_sk().to_string()))
+            .send()
+            .await
+            .expect("get_item should read status-updated event")
+            .item
+            .expect("event item should exist");
+        assert_eq!(attr_s(&event_after_status, "status"), "failed");
+        assert_eq!(attr_n_i64(&event_after_status, "next_retry_at"), ts_now + 60);
+
+        let attempt = DeliveryAttempt::new(
+            event_id.clone(),
+            1,
+            ts_now + 5,
+            Some(500),
+            250,
+            Some("validation failure".to_string()),
+        );
+        service
+            .record_attempt(attempt)
+            .await
+            .expect("record_attempt should create attempt item");
+
+        let attempt_item = client
+            .get_item()
+            .table_name(&events_table)
+            .consistent_read(true)
+            .key("pk", AttributeValue::S(event_pk.clone()))
+            .key("sk", AttributeValue::S(Event::attempt_sk(1)))
+            .send()
+            .await
+            .expect("get_item should read attempt item")
+            .item
+            .expect("attempt item should exist");
+        assert_eq!(attr_n_u32(&attempt_item, "attempt_number"), 1);
+        assert_eq!(attr_n_i64(&attempt_item, "attempted_at"), ts_now + 5);
+        assert_eq!(attr_n_u32(&attempt_item, "http_status"), 500);
+        assert_eq!(attr_s(&attempt_item, "error_message"), "validation failure");
+
+        client
+            .delete_item()
+            .table_name(&events_table)
+            .key("pk", AttributeValue::S(event_pk.clone()))
+            .key("sk", AttributeValue::S(Event::metadata_sk().to_string()))
+            .send()
+            .await
+            .expect("cleanup metadata item should succeed");
+        client
+            .delete_item()
+            .table_name(&events_table)
+            .key("pk", AttributeValue::S(event_pk))
+            .key("sk", AttributeValue::S(Event::attempt_sk(1)))
+            .send()
+            .await
+            .expect("cleanup attempt item should succeed");
+        client
+            .delete_item()
+            .table_name(&configs_table)
+            .key("pk", AttributeValue::S(config_pk))
+            .key("sk", AttributeValue::S(WebhookConfig::sk().to_string()))
+            .send()
+            .await
+            .expect("cleanup config item should succeed");
+    }
+}
