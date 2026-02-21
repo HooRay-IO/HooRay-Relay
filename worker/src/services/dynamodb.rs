@@ -506,11 +506,14 @@ mod tests {
             .expect("get_event should return seeded event");
         assert_eq!(event.attempt_count, 0);
 
+        // `increment_attempt_count` persists the current `attempt_count` field
+        // from the event into DynamoDB; the caller is responsible for updating
+        // `event.attempt_count` before calling it.
         event.attempt_count = 1;
         service
             .increment_attempt_count(&event)
             .await
-            .expect("increment_attempt_count should update attempt_count");
+            .expect("increment_attempt_count should persist updated attempt_count");
 
         let event_after_count = client
             .get_item()
@@ -576,7 +579,7 @@ mod tests {
             .expect("attempt item should exist");
         assert_eq!(attr_n_u32(&attempt_item, "attempt_number"), 1);
         assert_eq!(attr_n_i64(&attempt_item, "attempted_at"), ts_now + 5);
-        assert_eq!(attr_n_u32(&attempt_item, "http_status") as u16, 500u16);
+        assert_eq!(attr_n_u32(&attempt_item, "http_status"), 500u32);
         assert_eq!(attr_s(&attempt_item, "error_message"), "validation failure");
     }
 }
