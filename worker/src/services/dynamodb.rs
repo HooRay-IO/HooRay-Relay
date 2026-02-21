@@ -417,6 +417,15 @@ mod tests {
             .await
             .expect("seed config put-item should succeed");
 
+        let config = service
+            .get_config(&customer_id)
+            .await
+            .expect("get_config should return seeded config");
+        assert_eq!(config.customer_id, customer_id);
+        assert_eq!(config.url, "https://webhook.site/service-test");
+        assert_eq!(config.secret, "whsec_service_test");
+        assert_eq!(config.max_retries, 3);
+        assert!(config.active);
         let mut event = service
             .get_event(&event_id)
             .await
@@ -492,7 +501,7 @@ mod tests {
             .expect("attempt item should exist");
         assert_eq!(attr_n_u32(&attempt_item, "attempt_number"), 1);
         assert_eq!(attr_n_i64(&attempt_item, "attempted_at"), ts_now + 5);
-        assert_eq!(attr_n_u32(&attempt_item, "http_status"), 500);
+        assert_eq!(attr_n_u32(&attempt_item, "http_status") as u16, 500u16);
         assert_eq!(attr_s(&attempt_item, "error_message"), "validation failure");
 
         client

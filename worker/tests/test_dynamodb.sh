@@ -8,8 +8,8 @@ set -euo pipefail
 : "${WEBHOOK_EVENTS_TABLE:?WEBHOOK_EVENTS_TABLE is required}"
 : "${WEBHOOK_CONFIGS_TABLE:?WEBHOOK_CONFIGS_TABLE is required}"
 
-EVENT_ID="${EVENT_ID:-evt_test_$(date +%s)}"
-CUSTOMER_ID="${CUSTOMER_ID:-cust_test_$(date +%s)}"
+EVENT_ID="${EVENT_ID:-evt_test_$(date +%s%N)}"
+CUSTOMER_ID="${CUSTOMER_ID:-cust_test_$(date +%s%N)}"
 TS_NOW="$(date +%s)"
 
 EVENT_PK="EVENT#${EVENT_ID}"
@@ -80,3 +80,17 @@ fi
 
 echo "SUCCESS: DynamoDB test data created and fetch verified"
 echo "EVENT_ID=${EVENT_ID} CUSTOMER_ID=${CUSTOMER_ID}"
+
+echo "[CLEANUP] Deleting test event from ${WEBHOOK_EVENTS_TABLE}"
+aws dynamodb delete-item \
+  --region "$AWS_REGION" \
+  --table-name "$WEBHOOK_EVENTS_TABLE" \
+  --key "{\"pk\":{\"S\":\"${EVENT_PK}\"},\"sk\":{\"S\":\"${EVENT_SK}\"}}"
+
+echo "[CLEANUP] Deleting test config from ${WEBHOOK_CONFIGS_TABLE}"
+aws dynamodb delete-item \
+  --region "$AWS_REGION" \
+  --table-name "$WEBHOOK_CONFIGS_TABLE" \
+  --key "{\"pk\":{\"S\":\"${CONFIG_PK}\"},\"sk\":{\"S\":\"${CONFIG_SK}\"}}"
+
+echo "CLEANUP: Test items deleted from DynamoDB tables"
