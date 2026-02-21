@@ -92,7 +92,7 @@
 **Morning (9am-12pm): HMAC Signature Service**
 - [ ] Create `src/services/signature.rs`
 - [ ] Implement `SignatureService::generate()`:
-  - Create signing string (timestamp.payload)
+  - Create signing string: `<X-Webhook-Timestamp> + "." + <raw request body JSON>`
   - Generate HMAC-SHA256
   - Format as "sha256={hex}"
 - [ ] Implement `SignatureService::verify()` for testing
@@ -105,6 +105,7 @@
 - [ ] Create `src/services/delivery.rs`
 - [ ] Implement `DeliveryService::deliver()`:
   - Generate HMAC signature
+  - Set `X-Webhook-Timestamp` using the exact timestamp used for signing
   - Set proper headers
   - Make HTTP POST request
   - Handle timeouts (30s)
