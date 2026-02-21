@@ -1,10 +1,10 @@
+---
 name: Rust CI
 
-on:
-  push:
-    branches: ["main"]
+"on":
   pull_request:
     branches: ["main"]
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,4 +32,3 @@ jobs:
 
       - name: Test
         run: cargo test --verbose
-
