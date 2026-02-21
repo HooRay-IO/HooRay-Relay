@@ -406,8 +406,8 @@ mod tests {
                             .await
                         {
                             eprintln!(
-                                "cleanup guard: failed to delete {}/{} from {}: {}",
-                                "pk", "sk", item.table, err
+                                "cleanup guard: failed to delete pk/sk from {}: {}",
+                                item.table, err
                             );
                         }
                     }
