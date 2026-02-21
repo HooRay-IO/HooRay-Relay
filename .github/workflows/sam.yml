@@ -6,12 +6,18 @@ name: SAM CI
     branches: ["main"]
   workflow_dispatch:
 
+concurrency:
+  group: sam-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   sam-and-rust-checks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,6 +29,8 @@ jobs:
 
       - name: Cache Rust deps
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hooray-relay-rust
 
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
@@ -31,4 +39,4 @@ jobs:
         run: sam validate --lint
 
       - name: Build SAM app
-        run: sam build
+        run: sam build --parallel
