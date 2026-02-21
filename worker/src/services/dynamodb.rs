@@ -333,14 +333,18 @@ mod tests {
 
     fn attr_n_u32(item: &HashMap<String, AttributeValue>, key: &str) -> u32 {
         match item.get(key) {
-            Some(AttributeValue::N(value)) => value.parse::<u32>().expect("invalid u32 number attr"),
+            Some(AttributeValue::N(value)) => {
+                value.parse::<u32>().expect("invalid u32 number attr")
+            }
             _ => panic!("missing or invalid number attr: {}", key),
         }
     }
 
     fn attr_n_i64(item: &HashMap<String, AttributeValue>, key: &str) -> i64 {
         match item.get(key) {
-            Some(AttributeValue::N(value)) => value.parse::<i64>().expect("invalid i64 number attr"),
+            Some(AttributeValue::N(value)) => {
+                value.parse::<i64>().expect("invalid i64 number attr")
+            }
             _ => panic!("missing or invalid number attr: {}", key),
         }
     }
@@ -366,7 +370,8 @@ mod tests {
 
         let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
         let client = Client::new(&shared_config);
-        let service = DynamoDbService::new(client.clone(), events_table.clone(), configs_table.clone());
+        let service =
+            DynamoDbService::new(client.clone(), events_table.clone(), configs_table.clone());
 
         client
             .put_item()
@@ -378,7 +383,9 @@ mod tests {
             .item("customer_id", AttributeValue::S(customer_id.clone()))
             .item(
                 "payload",
-                AttributeValue::S("{\"order_id\":\"ord_service_test\",\"amount\":42.0}".to_string()),
+                AttributeValue::S(
+                    "{\"order_id\":\"ord_service_test\",\"amount\":42.0}".to_string(),
+                ),
             )
             .item("status", AttributeValue::S("pending".to_string()))
             .item("attempt_count", AttributeValue::N("0".to_string()))
@@ -398,7 +405,10 @@ mod tests {
                 "url",
                 AttributeValue::S("https://webhook.site/service-test".to_string()),
             )
-            .item("secret", AttributeValue::S("whsec_service_test".to_string()))
+            .item(
+                "secret",
+                AttributeValue::S("whsec_service_test".to_string()),
+            )
             .item("max_retries", AttributeValue::N("3".to_string()))
             .item("active", AttributeValue::Bool(true))
             .item("created_at", AttributeValue::N(ts_now.to_string()))
@@ -451,7 +461,10 @@ mod tests {
             .item
             .expect("event item should exist");
         assert_eq!(attr_s(&event_after_status, "status"), "failed");
-        assert_eq!(attr_n_i64(&event_after_status, "next_retry_at"), ts_now + 60);
+        assert_eq!(
+            attr_n_i64(&event_after_status, "next_retry_at"),
+            ts_now + 60
+        );
 
         let attempt = DeliveryAttempt::new(
             event_id.clone(),
