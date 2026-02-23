@@ -4,9 +4,28 @@ set -euo pipefail
 # Day 2 DynamoDB smoke test for Engineer 2 worker service.
 # Creates test event/config items and verifies they can be fetched.
 
+require_one_of() {
+  local var_name_a="$1"
+  local var_name_b="$2"
+  local value_a="${!var_name_a:-}"
+  local value_b="${!var_name_b:-}"
+
+  if [[ -n "$value_a" ]]; then
+    printf '%s' "$value_a"
+    return 0
+  fi
+  if [[ -n "$value_b" ]]; then
+    printf '%s' "$value_b"
+    return 0
+  fi
+
+  echo "ERROR: set ${var_name_a} or ${var_name_b}" >&2
+  exit 1
+}
+
 : "${AWS_REGION:?AWS_REGION is required}"
-: "${WEBHOOK_EVENTS_TABLE:?WEBHOOK_EVENTS_TABLE is required}"
-: "${WEBHOOK_CONFIGS_TABLE:?WEBHOOK_CONFIGS_TABLE is required}"
+EVENTS_TABLE="$(require_one_of "EVENTS_TABLE" "WEBHOOK_EVENTS_TABLE")"
+CONFIGS_TABLE="$(require_one_of "CONFIGS_TABLE" "WEBHOOK_CONFIGS_TABLE")"
 
 EVENT_ID="${EVENT_ID:-evt_test_$(date +%s%N)}"
 CUSTOMER_ID="${CUSTOMER_ID:-cust_test_$(date +%s%N)}"
@@ -30,19 +49,19 @@ cleanup() {
   fi
 
   if [[ "$EVENT_WRITTEN" == "true" ]]; then
-    echo "[CLEANUP] Deleting test event from ${WEBHOOK_EVENTS_TABLE}"
+    echo "[CLEANUP] Deleting test event from ${EVENTS_TABLE}"
     aws dynamodb delete-item \
       --region "$AWS_REGION" \
-      --table-name "$WEBHOOK_EVENTS_TABLE" \
+      --table-name "$EVENTS_TABLE" \
       --key "{\"pk\":{\"S\":\"${EVENT_PK}\"},\"sk\":{\"S\":\"${EVENT_SK}\"}}" \
       >/dev/null 2>&1 || echo "[CLEANUP] WARN: failed to delete event item"
   fi
 
   if [[ "$CONFIG_WRITTEN" == "true" ]]; then
-    echo "[CLEANUP] Deleting test config from ${WEBHOOK_CONFIGS_TABLE}"
+    echo "[CLEANUP] Deleting test config from ${CONFIGS_TABLE}"
     aws dynamodb delete-item \
       --region "$AWS_REGION" \
-      --table-name "$WEBHOOK_CONFIGS_TABLE" \
+      --table-name "$CONFIGS_TABLE" \
       --key "{\"pk\":{\"S\":\"${CONFIG_PK}\"},\"sk\":{\"S\":\"${CONFIG_SK}\"}}" \
       >/dev/null 2>&1 || echo "[CLEANUP] WARN: failed to delete config item"
   fi
@@ -56,10 +75,10 @@ cleanup() {
 
 trap cleanup EXIT INT TERM
 
-echo "[1/4] Writing test event to ${WEBHOOK_EVENTS_TABLE}"
+echo "[1/4] Writing test event to ${EVENTS_TABLE}"
 aws dynamodb put-item \
   --region "$AWS_REGION" \
-  --table-name "$WEBHOOK_EVENTS_TABLE" \
+  --table-name "$EVENTS_TABLE" \
   --condition-expression "attribute_not_exists(pk) AND attribute_not_exists(sk)" \
   --item "{
     \"pk\": {\"S\": \"${EVENT_PK}\"},
@@ -73,10 +92,10 @@ aws dynamodb put-item \
   }"
 EVENT_WRITTEN=true
 
-echo "[2/4] Writing test config to ${WEBHOOK_CONFIGS_TABLE}"
+echo "[2/4] Writing test config to ${CONFIGS_TABLE}"
 aws dynamodb put-item \
   --region "$AWS_REGION" \
-  --table-name "$WEBHOOK_CONFIGS_TABLE" \
+  --table-name "$CONFIGS_TABLE" \
   --condition-expression "attribute_not_exists(pk) AND attribute_not_exists(sk)" \
   --item "{
     \"pk\": {\"S\": \"${CONFIG_PK}\"},
@@ -95,7 +114,7 @@ echo "[3/4] Fetching event by pk/sk"
 EVENT_ID_FETCHED="$(aws dynamodb get-item \
   --consistent-read \
   --region "$AWS_REGION" \
-  --table-name "$WEBHOOK_EVENTS_TABLE" \
+  --table-name "$EVENTS_TABLE" \
   --key "{\"pk\":{\"S\":\"${EVENT_PK}\"},\"sk\":{\"S\":\"${EVENT_SK}\"}}" \
   --query 'Item.event_id.S' \
   --output text)"
@@ -104,7 +123,7 @@ echo "[4/4] Fetching config by pk/sk"
 CONFIG_CUSTOMER_ID_FETCHED="$(aws dynamodb get-item \
   --consistent-read \
   --region "$AWS_REGION" \
-  --table-name "$WEBHOOK_CONFIGS_TABLE" \
+  --table-name "$CONFIGS_TABLE" \
   --key "{\"pk\":{\"S\":\"${CONFIG_PK}\"},\"sk\":{\"S\":\"${CONFIG_SK}\"}}" \
   --query 'Item.customer_id.S' \
   --output text)"
