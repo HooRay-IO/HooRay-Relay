@@ -113,10 +113,33 @@ pub async fn receive_webhook(
             existing_event_id = %existing_id,
             "duplicate webhook request — returning existing event_id"
         );
+
+        // Fetch the original creation timestamp so that `created_at` in the response
+        // reflects when the event was first created, not when this duplicate was received.
+        let original_created_at = match idempotency::get_existing_event_created_at(
+            &state.dynamo,
+            &state.config.idempotency_table,
+            &req.idempotency_key,
+            &existing_id,
+        )
+        .await
+        {
+            Ok(ts) => ts,
+            Err(e) => {
+                error!(
+                    error = %e,
+                    idempotency_key = %req.idempotency_key,
+                    existing_event_id = %existing_id,
+                    "failed to load original created_at for duplicate webhook request"
+                );
+                return ingestion_error_response(e);
+            }
+        };
+
         let body = WebhookReceiveResponse {
             event_id: existing_id,
             status: ReceiveStatus::Duplicate,
-            created_at,
+            created_at: original_created_at,
         };
         return (StatusCode::OK, Json(body)).into_response();
     }
@@ -154,6 +177,15 @@ pub async fn receive_webhook(
     )
     .await
     {
+        // At this point the event has already been persisted to DynamoDB and the
+        // idempotency record has been written. If SQS enqueue fails, this creates
+        // an "orphaned" event that will not be delivered via the queue, and
+        // retrying the same request (with the same idempotency key) will be
+        // treated as a duplicate and will not enqueue a new message.
+        //
+        // Recovery strategy: rely on logging/monitoring for this error and
+        // perform manual re-queueing or run a separate reconciliation job that
+        // scans for persisted-but-not-enqueued events and enqueues them.
         error!(error = %e, event_id = %event_id, "failed to enqueue event on SQS");
         return ingestion_error_response(e);
     }
@@ -187,10 +219,13 @@ fn generate_event_id() -> String {
 
 /// Current time as Unix seconds.
 fn unix_now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock should be after Unix epoch")
-        .as_secs() as i64
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs() as i64,
+        Err(err) => {
+            error!("system clock is before Unix epoch: {}", err);
+            0
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

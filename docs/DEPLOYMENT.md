@@ -28,7 +28,7 @@ version = 0.1
 [default.deploy.parameters]
 stack_name        = "hooray-dev"
 region            = "us-west-2"
-profile           = "hooray-dev"     # ← AWS profile name (see Step 4)
+profile           = "hooray-dev"     # ← AWS profile name (see Step 3b)
 confirm_changeset = true
 capabilities      = "CAPABILITY_IAM"
 disable_rollback  = false
@@ -73,23 +73,28 @@ export AWS_DEFAULT_REGION="$AWS_REGION"
 
 ## 3. Remaining Steps Before First Deploy
 
-### Step 3a — Get credentials from Engineer 1 ⏳ PENDING
+### Step 3a — Get access via AWS SSO / IAM Identity Center ⏳ PENDING
 
-Need from Engineer 1:
+Need from the platform/admin team:
 
-- [ ] AWS Access Key ID (for `hooray-dev` IAM user)
-- [ ] AWS Secret Access Key
+- [ ] AWS SSO start URL
+- [ ] AWS SSO region (for the Identity Center instance)
+- [ ] AWS account ID that contains the `hooray-dev` deploy role
+- [ ] SSO role name to assume for deployment (e.g. `HoorayDevDeploymentRole`)
 - [ ] Confirm the deploy region (`us-west-2`)
-- [ ] IAM policy must allow: CloudFormation, DynamoDB, SQS, Lambda, API Gateway, S3, IAM
+- [ ] The deploy role must allow: CloudFormation, DynamoDB, SQS, Lambda, API Gateway, S3, IAM
 
-### Step 3b — Configure the `hooray-dev` profile ⏳ PENDING
+### Step 3b — Configure the `hooray-dev` profile via SSO ⏳ PENDING
 
 ```bash
-aws configure --profile hooray-dev
-# AWS Access Key ID:     <from Engineer 1>
-# AWS Secret Access Key: <from Engineer 1>
-# Default region:        us-west-2
-# Default output format: json
+aws configure sso --profile hooray-dev
+# SSO session name:             hooray-dev
+# SSO start URL:                <from Step 3a>
+# SSO region:                   <from Step 3a>
+# SSO account ID:               <from Step 3a>
+# SSO role name:                <from Step 3a>
+# CLI default client Region:    us-west-2
+# CLI default output format:    json
 ```
 
 Verify credentials work:
