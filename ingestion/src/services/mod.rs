@@ -7,7 +7,9 @@
 //! | [`dynamodb`]    | AWS DynamoDB client factory and [`AppConfig`] struct   |
 //! | [`idempotency`] | Conditional DynamoDB write to deduplicate inbound requests |
 //! | [`events`]      | Persist new webhook events with 30-day TTL             |
+//! | [`queue`]       | Enqueue events onto SQS with `customer_id` message attribute |
 
 pub mod dynamodb;
 pub mod events;
 pub mod idempotency;
+pub mod queue;
