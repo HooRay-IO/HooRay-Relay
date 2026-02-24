@@ -408,7 +408,7 @@ tracing-subscriber = "0.3"
    - Updates event status
 
 4. **`generate_signature()`**
-   - HMAC-SHA256 of payload with customer secret
+   - HMAC-SHA256 of `<timestamp>.<raw_json_body>` with customer secret
    - Format: `sha256={hex_encoded_signature}`
 
 5. **`record_attempt()`**
@@ -567,26 +567,30 @@ fn is_conditional_check_failed(e: &SdkError<PutItemError>) -> bool {
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 
-fn generate_signature(secret: &str, payload: &str) -> String {
+fn generate_signature(secret: &str, timestamp: i64, raw_body: &str) -> String {
     type HmacSha256 = Hmac<Sha256>;
-    
+
+    let signing = format!("{}.{}", timestamp, raw_body);
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes())
         .expect("HMAC can take key of any size");
-    mac.update(payload.as_bytes());
-    
+    mac.update(signing.as_bytes());
+
     let result = mac.finalize();
     let code_bytes = result.into_bytes();
-    
+
     format!("sha256={}", hex::encode(code_bytes))
 }
 
 // Usage in worker
-let signature = generate_signature(&config.secret, &event.payload);
+let timestamp = chrono::Utc::now().timestamp();
+let signature = generate_signature(&config.secret, timestamp, &event.payload);
 let response = http_client
     .post(&config.url)
+    .header("Content-Type", "application/json")
     .header("X-Webhook-Signature", signature)
     .header("X-Webhook-Id", &event.event_id)
-    .json(&serde_json::from_str::<Value>(&event.payload)?)
+    .header("X-Webhook-Timestamp", timestamp.to_string())
+    .body(event.payload.clone())
     .send()
     .await?;
 ```
@@ -684,9 +688,10 @@ mod tests {
     #[test]
     fn test_signature_generation() {
         let secret = "whsec_test123";
+        let timestamp = 1707840000_i64;
         let payload = r#"{"order_id":"ord_123"}"#;
-        let sig = generate_signature(secret, payload);
-        
+        let sig = generate_signature(secret, timestamp, payload);
+
         assert!(sig.starts_with("sha256="));
         assert_eq!(sig.len(), 71); // "sha256=" + 64 hex chars
     }

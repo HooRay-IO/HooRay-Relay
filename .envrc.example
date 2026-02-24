@@ -1,7 +1,38 @@
 export AWS_PROFILE="your-aws-profile"
 export AWS_REGION="us-west-2"
 export AWS_DEFAULT_REGION="$AWS_REGION"
+export STACK_NAME="your-stack-name"
+export SKIP_DELIVERY=true
 
-# Worker DynamoDB tables (used by worker/tests/test_dynamodb.sh)
-export WEBHOOK_EVENTS_TABLE="webhook_events_dev"
-export WEBHOOK_CONFIGS_TABLE="webhook_configs_dev"
+# Resolve core values from CloudFormation outputs.
+export EVENTS_TABLE=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='EventsTableName'].OutputValue" \
+  --output text)
+export CONFIGS_TABLE=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='ConfigsTableName'].OutputValue" \
+  --output text)
+export QUEUE_URL=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='QueueUrl'].OutputValue" \
+  --output text)
+
+# Optional but useful outputs/resources.
+export DLQ_URL=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='DLQUrl'].OutputValue" \
+  --output text)
+export INGESTION_API_URL=$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='IngestionApiUrl'].OutputValue" \
+  --output text)
+export WORKER_FN=$(aws cloudformation describe-stack-resources \
+  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --logical-resource-id "WorkerFunction" \
+  --query "StackResources[0].PhysicalResourceId" \
+  --output text)
+
+# Backward-compatible aliases for older scripts
+export WEBHOOK_EVENTS_TABLE="$EVENTS_TABLE"
+export WEBHOOK_CONFIGS_TABLE="$CONFIGS_TABLE"
