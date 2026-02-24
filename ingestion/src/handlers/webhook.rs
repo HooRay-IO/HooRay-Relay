@@ -124,15 +124,10 @@ pub async fn receive_webhook(
     // ------------------------------------------------------------------
     // Step 3 — Persist the event to DynamoDB.
     // ------------------------------------------------------------------
-    let payload = match serde_json::to_string(&req.data) {
+    let payload = match events::serialize_payload(&req.data) {
         Ok(p) => p,
         Err(e) => {
-            error!(error = %e, "failed to serialize event payload");
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({ "error": "payload serialization failed" })),
-            )
-                .into_response();
+            return ingestion_error_response(e);
         }
     };
 

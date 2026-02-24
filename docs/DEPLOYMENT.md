@@ -1,6 +1,5 @@
 # HooRay-Relay — Deployment Guide
 
-> Status: **February 22, 2026** — tooling fully installed locally, awaiting AWS credentials from Engineer 1.
 
 ---
 
@@ -155,5 +154,5 @@ sam build && sam deploy
 ```bash
 source "$HOME/.cargo/env"
 cargo test
-# 38 tests: 32 ingestion + 6 worker — all passing
+# All tests should pass.
 ```
