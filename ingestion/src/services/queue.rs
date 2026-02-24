@@ -44,17 +44,13 @@ pub async fn enqueue_event(
     event_id: &str,
     customer_id: &str,
 ) -> Result<(), IngestionError> {
-    debug!(
-        event_id,
-        customer_id, "serializing SQS message body"
-    );
+    debug!(event_id, customer_id, "serializing SQS message body");
 
     // Build the JSON body.
     let msg = QueueMessage {
         event_id: event_id.to_string(),
     };
-    let body =
-        serde_json::to_string(&msg).map_err(|e| IngestionError::Sqs(e.to_string()))?;
+    let body = serde_json::to_string(&msg).map_err(|e| IngestionError::Sqs(e.to_string()))?;
 
     // Build the customer_id message attribute.
     let customer_id_attr = MessageAttributeValue::builder()
@@ -81,9 +77,7 @@ pub async fn enqueue_event(
 
     info!(
         event_id,
-        customer_id,
-        queue_url,
-        "event enqueued for delivery"
+        customer_id, queue_url, "event enqueued for delivery"
     );
 
     Ok(())

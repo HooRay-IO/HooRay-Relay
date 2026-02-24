@@ -32,9 +32,9 @@ use crate::model::{
     IngestionError, ReceiveStatus, WebhookReceiveRequest, WebhookReceiveResponse,
     WebhookValidationError,
 };
-use crate::services::{events, idempotency, queue};
 use crate::services::dynamodb::AppConfig;
 use crate::services::idempotency::IdempotencyOutcome;
+use crate::services::{events, idempotency, queue};
 
 // ---------------------------------------------------------------------------
 // Shared application state (injected via Axum State extractor)
@@ -216,11 +216,7 @@ fn ingestion_error_response(e: IngestionError) -> Response {
         IngestionError::ItemNotFound { .. } => StatusCode::NOT_FOUND,
         IngestionError::DecodeDynamo(_) => StatusCode::INTERNAL_SERVER_ERROR,
     };
-    (
-        status,
-        Json(serde_json::json!({ "error": e.to_string() })),
-    )
-        .into_response()
+    (status, Json(serde_json::json!({ "error": e.to_string() }))).into_response()
 }
 
 // ---------------------------------------------------------------------------
@@ -260,7 +256,11 @@ mod tests {
     fn event_ids_are_unique() {
         let ids: Vec<String> = (0..100).map(|_| generate_event_id()).collect();
         let unique: std::collections::HashSet<_> = ids.iter().collect();
-        assert_eq!(ids.len(), unique.len(), "all 100 generated IDs must be unique");
+        assert_eq!(
+            ids.len(),
+            unique.len(),
+            "all 100 generated IDs must be unique"
+        );
     }
 
     // -----------------------------------------------------------------------
