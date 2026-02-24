@@ -114,32 +114,10 @@ pub async fn receive_webhook(
             "duplicate webhook request — returning existing event_id"
         );
 
-        // Fetch the original creation timestamp so that `created_at` in the response
-        // reflects when the event was first created, not when this duplicate was received.
-        let original_created_at = match idempotency::get_existing_event_created_at(
-            &state.dynamo,
-            &state.config.idempotency_table,
-            &req.idempotency_key,
-            &existing_id,
-        )
-        .await
-        {
-            Ok(ts) => ts,
-            Err(e) => {
-                error!(
-                    error = %e,
-                    idempotency_key = %req.idempotency_key,
-                    existing_event_id = %existing_id,
-                    "failed to load original created_at for duplicate webhook request"
-                );
-                return ingestion_error_response(e);
-            }
-        };
-
         let body = WebhookReceiveResponse {
             event_id: existing_id,
             status: ReceiveStatus::Duplicate,
-            created_at: original_created_at,
+            created_at: unix_now_secs(),
         };
         return (StatusCode::OK, Json(body)).into_response();
     }
