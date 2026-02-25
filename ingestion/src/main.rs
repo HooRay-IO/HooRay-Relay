@@ -59,7 +59,7 @@ async fn main() -> Result<(), lambda_http::Error> {
     // 3. Build AWS clients — reused across all warm invocations.
     // ------------------------------------------------------------------
     let aws_cfg = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    let dynamo = build_dynamo_client().await;
+    let dynamo = build_dynamo_client(&aws_cfg).await;
     let sqs = SqsClient::new(&aws_cfg);
 
     info!(
