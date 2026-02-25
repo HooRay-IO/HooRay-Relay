@@ -213,6 +213,159 @@ impl Worker {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aws_sdk_sqs::types::Message;
+    use std::sync::{Arc, Mutex};
+
+    /// Test double for exercising the message-processing logic without hitting AWS.
+    struct TestWorker {
+        deleted_receipt_handles: Arc<Mutex<Vec<String>>>,
+        delivered_event_ids: Arc<Mutex<Vec<String>>>,
+        next_action: MessageAction,
+    }
+
+    impl TestWorker {
+        fn new(next_action: MessageAction) -> Self {
+            Self {
+                deleted_receipt_handles: Arc::new(Mutex::new(Vec::new())),
+                delivered_event_ids: Arc::new(Mutex::new(Vec::new())),
+                next_action,
+            }
+        }
+
+        async fn delete_message(&self, receipt_handle: &str) -> Result<(), WorkerError> {
+            self.deleted_receipt_handles
+                .lock()
+                .unwrap()
+                .push(receipt_handle.to_string());
+            Ok(())
+        }
+
+        async fn deliver_event(&self, event_id: &str) -> Result<MessageAction, WorkerError> {
+            self.delivered_event_ids
+                .lock()
+                .unwrap()
+                .push(event_id.to_string());
+            Ok(self.next_action)
+        }
+
+        /// Copy of the production `process_message` logic, but using the test double's
+        /// in-memory `delete_message` and `deliver_event` implementations.
+        async fn process_message(&self, message: &Message) -> Result<(), WorkerError> {
+            let receipt_handle = message
+                .receipt_handle()
+                .ok_or_else(|| {
+                    WorkerError::InvalidMessage("missing receipt_handle".to_string())
+                })?;
+            let body = match message.body() {
+                Some(body) => body,
+                None => {
+                    // message missing body; deleting
+                    self.delete_message(receipt_handle).await?;
+                    return Ok(());
+                }
+            };
+
+            let queue_message: QueueMessage = match serde_json::from_str(body) {
+                Ok(parsed) => parsed,
+                Err(_) => {
+                    // invalid queue payload; deleting poison message
+                    self.delete_message(receipt_handle).await?;
+                    return Ok(());
+                }
+            };
+
+            match self.deliver_event(&queue_message.event_id).await? {
+                MessageAction::Delete => self.delete_message(receipt_handle).await?,
+                MessageAction::KeepForRetry => {}
+            }
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn process_message_deletes_when_body_missing() {
+        let worker = TestWorker::new(MessageAction::KeepForRetry);
+        let message = Message::builder()
+            .receipt_handle("rh-1")
+            // no body set
+            .build();
+
+        let result = worker.process_message(&message).await;
+        assert!(result.is_ok(), "expected Ok for missing body case");
+
+        let deleted = worker.deleted_receipt_handles.lock().unwrap();
+        assert_eq!(deleted.len(), 1);
+        assert_eq!(deleted[0], "rh-1");
+    }
+
+    #[tokio::test]
+    async fn process_message_deletes_on_invalid_json() {
+        let worker = TestWorker::new(MessageAction::KeepForRetry);
+        let message = Message::builder()
+            .receipt_handle("rh-2")
+            .body("not valid json")
+            .build();
+
+        let result = worker.process_message(&message).await;
+        assert!(result.is_ok(), "expected Ok for invalid JSON case");
+
+        let deleted = worker.deleted_receipt_handles.lock().unwrap();
+        assert_eq!(deleted.len(), 1);
+        assert_eq!(deleted[0], "rh-2");
+    }
+
+    #[tokio::test]
+    async fn process_message_calls_deliver_event_and_keeps_for_retry() {
+        let worker = TestWorker::new(MessageAction::KeepForRetry);
+        let payload = serde_json::json!({
+            "event_id": "event-123"
+        })
+        .to_string();
+
+        let message = Message::builder()
+            .receipt_handle("rh-3")
+            .body(payload)
+            .build();
+
+        let result = worker.process_message(&message).await;
+        assert!(result.is_ok(), "expected Ok for valid message");
+
+        let delivered = worker.delivered_event_ids.lock().unwrap();
+        assert_eq!(delivered.len(), 1);
+        assert_eq!(delivered[0], "event-123");
+
+        let deleted = worker.deleted_receipt_handles.lock().unwrap();
+        assert!(deleted.is_empty(), "message should be kept for retry");
+    }
+
+    #[tokio::test]
+    async fn process_message_calls_deliver_event_and_deletes_on_success() {
+        let worker = TestWorker::new(MessageAction::Delete);
+        let payload = serde_json::json!({
+            "event_id": "event-456"
+        })
+        .to_string();
+
+        let message = Message::builder()
+            .receipt_handle("rh-4")
+            .body(payload)
+            .build();
+
+        let result = worker.process_message(&message).await;
+        assert!(result.is_ok(), "expected Ok for valid message");
+
+        let delivered = worker.delivered_event_ids.lock().unwrap();
+        assert_eq!(delivered.len(), 1);
+        assert_eq!(delivered[0], "event-456");
+
+        let deleted = worker.deleted_receipt_handles.lock().unwrap();
+        assert_eq!(deleted.len(), 1);
+        assert_eq!(deleted[0], "rh-4");
+    }
+}
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt()
