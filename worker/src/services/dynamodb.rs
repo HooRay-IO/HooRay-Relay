@@ -263,6 +263,8 @@ impl DynamoDbService {
                     ":next_retry_at",
                     AttributeValue::N(next_retry_at.to_string()),
                 );
+        } else {
+            request = request.update_expression("SET #status = :status REMOVE next_retry_at");
         }
 
         request.send().await.map_err(|e| {
