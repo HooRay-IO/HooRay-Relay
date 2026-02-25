@@ -9,12 +9,14 @@ use tracing::{error, info, warn};
 
 use crate::model::{DeliveryResult, EventStatus, QueueMessage, WorkerError};
 
+#[derive(Clone, Copy)]
 enum MessageAction {
     Delete,
     KeepForRetry,
 }
 
 struct Worker {
+    delivery_service: DeliveryService,
     sqs_client: sqs::Client,
     queue_url: String,
     dynamodb_service: DynamoDbService,
@@ -46,6 +48,7 @@ impl Worker {
                 )
             })?;
         Ok(Worker {
+            delivery_service: DeliveryService::new(),
             sqs_client: sqs::Client::new(&config),
             queue_url,
             dynamodb_service: DynamoDbService::new(
@@ -135,7 +138,7 @@ impl Worker {
             return Ok(MessageAction::Delete);
         }
 
-        let (result, attempt) = DeliveryService::deliver(&event, &config).await?;
+        let (result, attempt) = self.delivery_service.deliver(&event, &config).await?;
         self.dynamodb_service.record_attempt(attempt).await?;
         event.attempt_count += 1;
         self.dynamodb_service
@@ -157,6 +160,9 @@ impl Worker {
                     Ok(MessageAction::Delete)
                 } else {
                     info!(event_id = %event.event_id, attempt_count = event.attempt_count, max_retries = config.max_retries, "retryable failure, keeping SQS message");
+                    let next_retry_at = chrono::Utc::now().timestamp() + (60 * 5);
+                    event.mark_retry_scheduled(next_retry_at);
+                    self.dynamodb_service.update_event_status(&event).await?;
                     Ok(MessageAction::KeepForRetry)
                 }
             }
@@ -220,10 +226,11 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     /// Test double for exercising the message-processing logic without hitting AWS.
+    #[derive(Clone)]
     struct TestWorker {
         deleted_receipt_handles: Arc<Mutex<Vec<String>>>,
         delivered_event_ids: Arc<Mutex<Vec<String>>>,
-        next_action: MessageAction,
+        next_action: Arc<Mutex<MessageAction>>,
     }
 
     impl TestWorker {
@@ -231,7 +238,7 @@ mod tests {
             Self {
                 deleted_receipt_handles: Arc::new(Mutex::new(Vec::new())),
                 delivered_event_ids: Arc::new(Mutex::new(Vec::new())),
-                next_action,
+                next_action: Arc::new(Mutex::new(next_action)),
             }
         }
 
@@ -248,7 +255,7 @@ mod tests {
                 .lock()
                 .unwrap()
                 .push(event_id.to_string());
-            Ok(self.next_action)
+            Ok(*self.next_action.lock().unwrap())
         }
 
         /// Copy of the production `process_message` logic, but using the test double's
@@ -256,9 +263,7 @@ mod tests {
         async fn process_message(&self, message: &Message) -> Result<(), WorkerError> {
             let receipt_handle = message
                 .receipt_handle()
-                .ok_or_else(|| {
-                    WorkerError::InvalidMessage("missing receipt_handle".to_string())
-                })?;
+                .ok_or_else(|| WorkerError::InvalidMessage("missing receipt_handle".to_string()))?;
             let body = match message.body() {
                 Some(body) => body,
                 None => {

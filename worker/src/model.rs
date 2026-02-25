@@ -68,7 +68,6 @@ impl Event {
     }
 
     pub fn mark_retry_scheduled(&mut self, next_retry_at: i64) {
-        self.attempt_count += 1;
         self.next_retry_at = Some(next_retry_at);
     }
 
@@ -278,6 +277,7 @@ mod tests {
 
         assert!(event.can_retry(3));
 
+        event.attempt_count += 1;
         event.mark_retry_scheduled(1_707_840_060);
         assert_eq!(event.attempt_count, 1);
         assert_eq!(event.next_retry_at, Some(1_707_840_060));

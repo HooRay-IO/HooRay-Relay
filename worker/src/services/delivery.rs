@@ -6,10 +6,19 @@ use std::time::{Duration, Instant};
 
 const DELIVERY_TIMEOUT_SECS: u64 = 30;
 
-pub struct DeliveryService;
+pub struct DeliveryService {
+    client: reqwest::Client,
+}
 
 impl DeliveryService {
+    pub fn new() -> Self {
+        Self {
+            client: reqwest::Client::new(),
+        }
+    }
+
     pub async fn deliver(
+        &self,
         event: &Event,
         config: &WebhookConfig,
     ) -> Result<(DeliveryResult, DeliveryAttempt), WorkerError> {
@@ -17,9 +26,9 @@ impl DeliveryService {
         let attempted_at = chrono::Utc::now().timestamp();
         let (timestamp, signature) =
             SignatureService::generate_for_now(&config.secret, &event.payload);
-        let client = reqwest::Client::new();
         let start = Instant::now();
-        let res = client
+        let res = self
+            .client
             .post(&config.url)
             .timeout(Duration::from_secs(DELIVERY_TIMEOUT_SECS))
             .header("Content-Type", "application/json")
