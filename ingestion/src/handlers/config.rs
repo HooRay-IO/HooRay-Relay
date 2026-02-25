@@ -70,11 +70,11 @@ pub async fn create_config(
 
     // Preserve the original `created_at` timestamp if this is an update.
     let created_at =
-        match configs::get_config(&state.dynamo, &state.config.configs_table, &req.customer_id)
+        match configs::fetch_config(&state.dynamo, &state.config.configs_table, &req.customer_id)
             .await
         {
-            Ok(Some(existing)) => existing.created_at,
-            Ok(None) => now,
+            Ok(existing) => existing.created_at,
+            Err(IngestionError::ItemNotFound { .. }) => now,
             Err(e) => {
                 error!(
                     error = %e,
