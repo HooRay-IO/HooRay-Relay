@@ -9,7 +9,7 @@
 
 ## Table of Contents
 
-1. [What Was Built — All Four Days](#1-what-was-built--all-four-days)
+1. [What Was Built — All Five Days](#1-what-was-built--all-five-days)
 2. [Project Structure](#2-project-structure)
 3. [Dependency Choices](#3-dependency-choices)
 4. [Data Models](#4-data-models)
@@ -17,13 +17,14 @@
 6. [Cross-Team Wire Format](#6-cross-team-wire-format)
 7. [Day 3 — SQS Integration & Webhook Handler](#7-day-3--sqs-integration--webhook-handler)
 8. [Day 4 — Config Management & Lambda Entry Point](#8-day-4--config-management--lambda-entry-point)
-9. [Bugs Encountered & Solutions](#9-bugs-encountered--solutions)
-10. [Running the Tests](#10-running-the-tests)
-11. [Roadmap — What's Next](#11-roadmap--whats-next)
+9. [Day 5 — Integration Testing & Engineer 2 Handoff](#9-day-5--integration-testing--engineer-2-handoff)
+10. [Bugs Encountered & Solutions](#10-bugs-encountered--solutions)
+11. [Running the Tests](#11-running-the-tests)
+12. [Roadmap — Week 2](#12-roadmap--week-2)
 
 ---
 
-## 1. What Was Built — All Four Days
+## 1. What Was Built — All Five Days
 
 | Day | Deliverable | File | Tests |
 |-----|-------------|------|-------|
@@ -36,6 +37,8 @@
 | 4 | `POST /webhooks/configs` + `GET /webhooks/configs` handlers | `src/handlers/config.rs` | 11 |
 | 4 | DynamoDB upsert + fetch for configs | `src/services/configs.rs` | 4 |
 | 4 | Lambda entry point (router + cold-start) | `src/main.rs` | — |
+| 5 | Live integration test script (10 cases) | `tests/integration_test.sh` | — |
+| 5 | Engineer 2 handoff document | `docs/handoff-engineer2.md` | — |
 
 **Total: 69 ingestion tests — 0 failures, 0 warnings.**
 
@@ -295,7 +298,145 @@ valid empty secret — because an empty HMAC key would accept any payload.
 
 ---
 
-## 9. Bugs Encountered & Solutions
+## 9. Day 5 — Integration Testing & Engineer 2 Handoff
+
+### What was built
+
+**`ingestion/tests/integration_test.sh`** — a bash script that drives the live
+API Gateway + Lambda and verifies every contract item agreed with Engineer 2
+(`CONTRACT_CONFIRMATION_LIST.md §10`). Runs `set -euo pipefail`, coloured
+pass/fail output, and cleans up all created DynamoDB rows + SQS messages on
+`EXIT` regardless of failures.
+
+**`docs/handoff-engineer2.md`** — the full handoff document for Engineer 2
+covering SQS contract, DynamoDB schemas, state-transition responsibilities,
+HMAC algorithm, retryable vs terminal HTTP codes, duplicate-message handling
+spec, sample AWS CLI queries, and change-control rules.
+
+### Integration test walkthrough
+
+The script runs 10 test cases in order. Each one builds on the previous:
+
+```
+Test 1  POST /webhooks/configs          → 201, whsec_ prefix on auto-generated secret
+Test 2  POST /webhooks/receive          → 202, evt_ prefix on event_id, valid timestamp
+Test 3  POST /webhooks/receive (replay) → 200, same event_id returned (idempotency)
+Test 4  POST /webhooks/receive          → not 202/200 for unknown customer (no config)
+Test 5  POST /webhooks/receive          → 422/400 for missing idempotency_key (validation)
+Test 6  GET  /webhooks/configs          → 200, all fields round-trip, secret matches create
+Test 7  GET  /webhooks/configs          → 404 for unknown customer
+Test 8  DynamoDB — event row            → pk/sk contract, all required fields, status=pending, attempt_count=0
+Test 9  DynamoDB — idempotency record   → event_id correct, TTL ≈ 24h from now
+Test 10 SQS — message in queue          → body = {"event_id":"..."} only, customer_id as MessageAttribute
+```
+
+To run it against a deployed stack:
+
+```bash
+export API_BASE_URL="https://<api-id>.execute-api.us-east-1.amazonaws.com/Prod"
+export AWS_REGION="us-east-1"
+export EVENTS_TABLE="webhook_events_dev"
+export IDEMPOTENCY_TABLE="webhook_idempotency_dev"
+export CONFIGS_TABLE="webhook_configs_dev"
+export QUEUE_URL="https://sqs.us-east-1.amazonaws.com/520819257503/webhook_delivery_dev"
+bash ingestion/tests/integration_test.sh
+```
+
+Pass `KEEP_TEST_DATA=true` to skip cleanup for manual DynamoDB / SQS inspection.
+
+### Thinking behind the test design
+
+**Why bash, not a Rust integration test?**  
+The integration tests cross a network boundary — API Gateway + Lambda + DynamoDB
++ SQS. A Rust test binary would need to be compiled and injected into the Lambda
+runtime or run with live AWS credentials baked in. A bash script with `curl` and
+`aws` CLI is self-contained, zero compile time, runnable by either engineer with
+no Rust toolchain, and trivially modifiable without a full `cargo build` cycle.
+
+**Why test in this order?**  
+Config must exist before a webhook can be received (the handler validates it).
+The idempotency test must reuse the same `idempotency_key` as the happy-path test
+to prove the same record is returned. DynamoDB / SQS verification tests run last
+because the event must be fully written before they query.
+
+**Why poll SQS instead of directly asserting?**  
+SQS is eventually consistent for `ReceiveMessage` — the message is usually
+visible within a second, but the API spec does not guarantee it. The script polls
+with a configurable timeout (default 30s) and interval (default 2s) to avoid
+flaky failures under transient queue delays.
+
+**Why assert `body_keys == 1`?**  
+Contract §6 says the SQS message body is **exactly** `{"event_id":"..."}` — one
+key only. An accidental `payload` or `customer_id` leak into the body would
+silently bloat every SQS message and break the worker's deserialization contract.
+The key-count assertion catches that regression at test time.
+
+### Git workflow on Day 5
+
+Day 5 introduced the fork + upstream remote pattern:
+
+```
+upstream → HooRay-IO/HooRay-Relay   (org repo — submit PRs here)
+origin   → Raydiate09/HooRay-Relay  (personal fork — push branches here)
+```
+
+Commands used:
+```bash
+git remote rename origin upstream
+git remote add origin https://github.com/Raydiate09/HooRay-Relay.git
+git push origin main                                        # seed fork's main
+git push origin feat/engineer1-day5-integration-handoff    # push feature branch
+# Open PR on GitHub: base = HooRay-IO/HooRay-Relay:main
+```
+
+Keeping in sync going forward:
+```bash
+git fetch upstream
+git checkout main && git merge upstream/main
+git push origin main
+```
+
+### Questions encountered on Day 5
+
+**Q: Why does the integration test script not verify the worker delivered the
+webhook? Isn't that the whole point?**
+
+A: The ingestion integration test only covers **ingestion contracts** — what
+Engineer 1 owns. Verifying worker delivery is Engineer 2's job in their own
+integration test (`worker/tests/end_to_end_test.sh`). Testing across ownership
+boundaries in a single script would make the test brittle: a worker bug would
+cause an ingestion test to fail, misleading the on-call engineer. Clear ownership
+= clear failure attribution.
+
+**Q: The SQS message stays in the queue after the test — won't the worker Lambda
+pick it up and try to deliver to a fake URL?**
+
+A: The cleanup function deletes the SQS message via its `ReceiptHandle` after the
+test passes. If the test fails before reaching test 10, the message was never
+received (no receipt handle), so it stays in the queue until the visibility
+timeout expires. Since `DELIVERY_URL` points at `webhook.site` (a safe sink),
+any accidental delivery attempt is harmless. For CI environments, set
+`QUEUE_URL` to a separate test queue with a DLQ and no worker Lambda subscribed.
+
+**Q: Why use a fork (`Raydiate09/HooRay-Relay`) instead of pushing branches
+directly to the org repo (`HooRay-IO/HooRay-Relay`)?**
+
+A: The org repo is shared by both engineers. Pushing feature branches directly
+to it works but pollutes the branch list. More importantly, the fork model
+enforces that every change to `main` goes through a PR review by the other
+engineer — you can't accidentally `git push upstream main`. The fork is a
+guardrail, not just a convention.
+
+**Q: Should `KEEP_TEST_DATA` default to `true` during active development?**
+
+A: No. Leaving test data accumulates cost (DynamoDB storage, SQS message
+retention) and can cause false positives in subsequent test runs if a row
+from a previous run happens to match the generated `customer_id`. Always default
+to cleanup. Use `KEEP_TEST_DATA=true` only when you need to inspect a failure.
+
+---
+
+## 10. Bugs Encountered & Solutions
 
 ### Bug 1 — Duplicate `mod tests` block in `worker/src/model.rs` (Day 1)
 
@@ -398,7 +539,7 @@ every PR.
 
 ---
 
-## 10. Running the Tests
+## 11. Running the Tests
 
 ```bash
 # All crates from repo root
@@ -442,17 +583,7 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 ---
 
-## 11. Roadmap — What's Next
-
-### Day 5 — Integration Testing & Handoff
-
-| Task | Description |
-|---|---|
-| Deploy to AWS | `sam build && sam deploy` — verify all 3 tables, SQS queue, both Lambdas created |
-| Integration test script | `tests/integration_test.sh` — curl the live API, verify DynamoDB records and SQS messages |
-| Verify idempotency end-to-end | POST same `idempotency_key` twice → second returns 200 with original `event_id` |
-| Verify worker handoff | Events appear in SQS → worker Lambda receives them → delivery attempts written to DynamoDB |
-| Handoff document for Engineer 2 | SQS message format, DynamoDB schemas, sample queries |
+## 12. Roadmap — Week 2
 
 ### Week 2
 
@@ -472,4 +603,4 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 | Config validation (URL format, secret length) | Medium | `CreateConfigRequest` has no `validate()` method yet |
 | `GET /webhooks/configs` authentication | Medium | Currently anyone can read any customer's config by guessing `customer_id` |
 | `duplicate` response `created_at` returns "now" not original timestamp | Low | Would require fetching full `IdempotencyRecord`; scoped for Week 2 |
-| Integration tests | High | Needed before any production traffic |
+| Integration tests run against live stack only | Medium | No local DynamoDB Local / LocalStack setup yet |
