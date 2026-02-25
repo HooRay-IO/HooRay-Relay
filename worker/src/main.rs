@@ -218,6 +218,23 @@ impl Worker {
         Ok(())
     }
 }
+#[tokio::main]
+async fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .json()
+        .init();
+
+    let worker = match Worker::new().await {
+        Ok(worker) => worker,
+        Err(err) => {
+            warn!(error = %err, "worker initialization failed");
+            return;
+        }
+    };
+
+    worker.run().await;
+}
 
 #[cfg(test)]
 mod tests {
@@ -370,21 +387,4 @@ mod tests {
         assert_eq!(deleted.len(), 1);
         assert_eq!(deleted[0], "rh-4");
     }
-}
-#[tokio::main]
-async fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .json()
-        .init();
-
-    let worker = match Worker::new().await {
-        Ok(worker) => worker,
-        Err(err) => {
-            warn!(error = %err, "worker initialization failed");
-            return;
-        }
-    };
-
-    worker.run().await;
 }

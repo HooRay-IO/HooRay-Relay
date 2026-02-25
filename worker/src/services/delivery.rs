@@ -10,6 +10,12 @@ pub struct DeliveryService {
     client: reqwest::Client,
 }
 
+impl Default for DeliveryService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DeliveryService {
     pub fn new() -> Self {
         Self {
