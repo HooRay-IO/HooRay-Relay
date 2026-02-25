@@ -14,7 +14,7 @@
 //!    For local development the `AWS_ENDPOINT_URL` override makes it point at
 //!    DynamoDB Local or LocalStack automatically.
 
-use aws_config::BehaviorVersion;
+use aws_config::SdkConfig;
 use aws_sdk_dynamodb::Client as DynamoClient;
 
 use crate::model::IngestionError;
@@ -117,9 +117,8 @@ fn require_env(key: &str) -> Result<String, IngestionError> {
 ///
 /// This function is `async` because loading `~/.aws/config` and refreshing
 /// IMDS credentials are async operations in the SDK.
-pub async fn build_dynamo_client() -> DynamoClient {
-    let config = aws_config::load_defaults(BehaviorVersion::latest()).await;
-    DynamoClient::new(&config)
+pub async fn build_dynamo_client(config: &SdkConfig) -> DynamoClient {
+    DynamoClient::new(config)
 }
 
 // ---------------------------------------------------------------------------
