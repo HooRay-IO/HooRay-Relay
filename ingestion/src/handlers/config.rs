@@ -68,13 +68,33 @@ pub async fn create_config(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(generate_secret);
 
+    // Preserve the original `created_at` timestamp if this is an update.
+    let created_at = match configs::get_config(
+        &state.dynamo,
+        &state.config.configs_table,
+        &req.customer_id,
+    )
+    .await
+    {
+        Ok(Some(existing)) => existing.created_at,
+        Ok(None) => now,
+        Err(e) => {
+            error!(
+                error = %e,
+                customer_id = %req.customer_id,
+                "failed to fetch existing webhook config; defaulting created_at to now"
+            );
+            now
+        }
+    };
+
     let config = WebhookConfig {
         customer_id: req.customer_id.clone(),
         url: req.url.clone(),
         secret,
         max_retries: 3,
         active: true,
-        created_at: now,
+        created_at,
         updated_at: now,
     };
 
@@ -152,10 +172,13 @@ fn config_error_response(e: IngestionError) -> Response {
 
 /// Returns the current Unix time in seconds.
 fn unix_now_secs() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock is before Unix epoch")
-        .as_secs() as i64
+    match SystemTime::now().duration_since(UNIX_EPOCH) {
+        Ok(duration) => duration.as_secs() as i64,
+        Err(err) => {
+            error!(?err, "system clock is before Unix epoch; defaulting unix_now_secs to 0");
+            0
+        }
+    }
 }
 
 /// Generate a `whsec_`-prefixed 32-character alphanumeric signing secret.

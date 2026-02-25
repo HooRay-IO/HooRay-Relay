@@ -7,7 +7,7 @@
 //! 3. Build AWS clients (DynamoDB + SQS) using the Lambda execution role.
 //! 4. Construct [`AppState`] and wrap it in an `Arc`.
 //! 5. Register all Axum routes.
-//! 6. Hand the router to `lambda_http` — one invocation per SQS trigger.
+//! 6. Hand the router to `lambda_http` — one invocation per HTTP request (API Gateway/Lambda HTTP).
 //!
 //! ## Routes
 //!
