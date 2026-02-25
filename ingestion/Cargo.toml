@@ -29,3 +29,6 @@ serde_dynamo.workspace = true
 
 # unique ID generation
 nanoid = "0.4"
+
+# Lambda runtime
+lambda_http.workspace = true
