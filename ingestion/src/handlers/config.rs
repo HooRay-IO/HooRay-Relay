@@ -69,24 +69,21 @@ pub async fn create_config(
         .unwrap_or_else(generate_secret);
 
     // Preserve the original `created_at` timestamp if this is an update.
-    let created_at = match configs::get_config(
-        &state.dynamo,
-        &state.config.configs_table,
-        &req.customer_id,
-    )
-    .await
-    {
-        Ok(Some(existing)) => existing.created_at,
-        Ok(None) => now,
-        Err(e) => {
-            error!(
-                error = %e,
-                customer_id = %req.customer_id,
-                "failed to fetch existing webhook config; defaulting created_at to now"
-            );
-            now
-        }
-    };
+    let created_at =
+        match configs::get_config(&state.dynamo, &state.config.configs_table, &req.customer_id)
+            .await
+        {
+            Ok(Some(existing)) => existing.created_at,
+            Ok(None) => now,
+            Err(e) => {
+                error!(
+                    error = %e,
+                    customer_id = %req.customer_id,
+                    "failed to fetch existing webhook config; defaulting created_at to now"
+                );
+                now
+            }
+        };
 
     let config = WebhookConfig {
         customer_id: req.customer_id.clone(),
@@ -175,7 +172,10 @@ fn unix_now_secs() -> i64 {
     match SystemTime::now().duration_since(UNIX_EPOCH) {
         Ok(duration) => duration.as_secs() as i64,
         Err(err) => {
-            error!(?err, "system clock is before Unix epoch; defaulting unix_now_secs to 0");
+            error!(
+                ?err,
+                "system clock is before Unix epoch; defaulting unix_now_secs to 0"
+            );
             0
         }
     }
