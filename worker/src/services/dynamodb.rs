@@ -370,19 +370,35 @@ mod tests {
     #[test]
     fn parse_event_item_accepts_null_optional_timestamps() {
         let mut item = HashMap::new();
-        item.insert("event_id".to_string(), AttributeValue::S("evt_nulls".to_string()));
+        item.insert(
+            "event_id".to_string(),
+            AttributeValue::S("evt_nulls".to_string()),
+        );
         item.insert(
             "customer_id".to_string(),
             AttributeValue::S("cust_nulls".to_string()),
         );
-        item.insert("payload".to_string(), AttributeValue::S("{\"ok\":true}".to_string()));
-        item.insert("status".to_string(), AttributeValue::S("pending".to_string()));
-        item.insert("attempt_count".to_string(), AttributeValue::N("0".to_string()));
-        item.insert("created_at".to_string(), AttributeValue::N("1707840000".to_string()));
+        item.insert(
+            "payload".to_string(),
+            AttributeValue::S("{\"ok\":true}".to_string()),
+        );
+        item.insert(
+            "status".to_string(),
+            AttributeValue::S("pending".to_string()),
+        );
+        item.insert(
+            "attempt_count".to_string(),
+            AttributeValue::N("0".to_string()),
+        );
+        item.insert(
+            "created_at".to_string(),
+            AttributeValue::N("1707840000".to_string()),
+        );
         item.insert("delivered_at".to_string(), AttributeValue::Null(true));
         item.insert("next_retry_at".to_string(), AttributeValue::Null(true));
 
-        let event = parse_event_item(Some(item)).expect("event with NULL optional attrs should parse");
+        let event =
+            parse_event_item(Some(item)).expect("event with NULL optional attrs should parse");
         assert_eq!(event.event_id, "evt_nulls");
         assert_eq!(event.delivered_at, None);
         assert_eq!(event.next_retry_at, None);
