@@ -19,6 +19,7 @@ fn optional_number_attr(
     key: &str,
 ) -> Result<Option<i64>, WorkerError> {
     match item.get(key) {
+        Some(AttributeValue::Null(_)) => Ok(None),
         Some(attr) => Ok(Some(get_number_attr(attr)? as i64)),
         None => Ok(None),
     }
@@ -349,6 +350,42 @@ mod tests {
             }
             _ => panic!("missing or invalid number attr: {}", key),
         }
+    }
+
+    #[test]
+    fn optional_number_attr_treats_null_as_none() {
+        let mut item = HashMap::new();
+        item.insert("delivered_at".to_string(), AttributeValue::Null(true));
+        item.insert("next_retry_at".to_string(), AttributeValue::Null(true));
+
+        let delivered = optional_number_attr(&item, "delivered_at")
+            .expect("NULL delivered_at should decode as None");
+        let next_retry = optional_number_attr(&item, "next_retry_at")
+            .expect("NULL next_retry_at should decode as None");
+
+        assert_eq!(delivered, None);
+        assert_eq!(next_retry, None);
+    }
+
+    #[test]
+    fn parse_event_item_accepts_null_optional_timestamps() {
+        let mut item = HashMap::new();
+        item.insert("event_id".to_string(), AttributeValue::S("evt_nulls".to_string()));
+        item.insert(
+            "customer_id".to_string(),
+            AttributeValue::S("cust_nulls".to_string()),
+        );
+        item.insert("payload".to_string(), AttributeValue::S("{\"ok\":true}".to_string()));
+        item.insert("status".to_string(), AttributeValue::S("pending".to_string()));
+        item.insert("attempt_count".to_string(), AttributeValue::N("0".to_string()));
+        item.insert("created_at".to_string(), AttributeValue::N("1707840000".to_string()));
+        item.insert("delivered_at".to_string(), AttributeValue::Null(true));
+        item.insert("next_retry_at".to_string(), AttributeValue::Null(true));
+
+        let event = parse_event_item(Some(item)).expect("event with NULL optional attrs should parse");
+        assert_eq!(event.event_id, "evt_nulls");
+        assert_eq!(event.delivered_at, None);
+        assert_eq!(event.next_retry_at, None);
     }
 
     struct CleanupItem {

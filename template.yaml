@@ -3,7 +3,7 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   HooRay-Relay — production-grade webhook delivery system.
   Provisions all shared infrastructure: DynamoDB tables, SQS queue + DLQ,
-  and Lambda function placeholders for both the ingestion and worker crates.
+  and the ingestion Lambda function.
 
 # ---------------------------------------------------------------------------
 # Parameters — override at deploy time with --parameter-overrides
@@ -20,7 +20,7 @@ Parameters:
     Default: 60
     Description: >
       How long (seconds) a message is hidden from other consumers after being
-      received.  Must be >= the maximum expected Lambda execution time.
+      received by the delivery worker.
 
   SqsMaxReceiveCount:
     Type: Number
@@ -28,6 +28,53 @@ Parameters:
     Description: >
       Maximum number of times a message is delivered before being moved to the
       DLQ.  Set to max_retries + 1 (initial attempt counts as 1).
+
+  EnableEcsWorker:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Enable ECS/Fargate resources for the delivery worker.
+
+  WorkerImageUri:
+    Type: String
+    Default: ""
+    Description: Full container image URI (including tag) for the worker task.
+
+  WorkerDesiredCount:
+    Type: Number
+    Default: 1
+    Description: Desired number of ECS worker tasks.
+
+  WorkerCpu:
+    Type: String
+    Default: "256"
+    AllowedValues: ["256", "512", "1024", "2048", "4096"]
+    Description: ECS task CPU units for the worker.
+
+  WorkerMemory:
+    Type: String
+    Default: "512"
+    AllowedValues: ["512", "1024", "2048", "3072", "4096", "5120", "6144", "7168", "8192"]
+    Description: ECS task memory (MiB) for the worker.
+
+  WorkerAssignPublicIp:
+    Type: String
+    Default: DISABLED
+    AllowedValues: [ENABLED, DISABLED]
+    Description: Assign public IP to ECS worker tasks.
+
+  EcsSubnetIds:
+    Type: String
+    Default: "subnet-00000000"
+    Description: Comma-separated subnet IDs for ECS worker tasks (override when EnableEcsWorker=true).
+
+  EcsSecurityGroupIds:
+    Type: String
+    Default: "sg-00000000"
+    Description: Comma-separated security group IDs for ECS worker tasks (override when EnableEcsWorker=true).
+
+Conditions:
+  CreateEcsWorker: !Equals [!Ref EnableEcsWorker, "true"]
 
 # ---------------------------------------------------------------------------
 # Globals — applied to all SAM functions
@@ -253,34 +300,146 @@ Resources:
             Method: GET
 
   # -------------------------------------------------------------------------
-  # Lambda: Worker (Engineer 2)
-  # Placeholder — binary will be provided by `cargo lambda build`
+  # ECS/Fargate Worker (Engineer 2) - optional, controlled by EnableEcsWorker
   # -------------------------------------------------------------------------
-  WorkerFunction:
-    Type: AWS::Serverless::Function
-    Metadata:
-      BuildMethod: makefile
+  WorkerLogGroup:
+    Condition: CreateEcsWorker
+    Type: AWS::Logs::LogGroup
     Properties:
-      FunctionName: !Sub "hooray-relay-worker-${Environment}"
-      CodeUri: .
-      Handler: bootstrap
-      Timeout: 55          # Must be < SqsVisibilityTimeoutSeconds
-      MemorySize: 256
+      LogGroupName: !Sub "/ecs/hooray-relay-worker-${Environment}"
+      RetentionInDays: 14
+
+  WorkerEcsCluster:
+    Condition: CreateEcsWorker
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "hooray-relay-worker-${Environment}"
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: engineer2
+
+  WorkerTaskExecutionRole:
+    Condition: CreateEcsWorker
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "hooray-relay-worker-exec-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: engineer2
+
+  WorkerTaskRole:
+    Condition: CreateEcsWorker
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "hooray-relay-worker-task-${Environment}"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref WebhookEventsTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref WebhookConfigsTable
-        - SQSPollerPolicy:
-            QueueName: !GetAtt WebhookDeliveryQueue.QueueName
-      Events:
-        SQSTrigger:
-          Type: SQS
-          Properties:
-            Queue: !GetAtt WebhookDeliveryQueue.Arn
-            BatchSize: 1            # Process one message at a time for MVP
-            FunctionResponseTypes:
-              - ReportBatchItemFailures  # Partial batch failure support
+        - PolicyName: WorkerSqsDynamoAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:ChangeMessageVisibility
+                  - sqs:GetQueueAttributes
+                  - sqs:GetQueueUrl
+                Resource: !GetAtt WebhookDeliveryQueue.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt WebhookEventsTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                Resource: !GetAtt WebhookConfigsTable.Arn
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: engineer2
+
+  WorkerTaskDefinition:
+    Condition: CreateEcsWorker
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "hooray-relay-worker-${Environment}"
+      Cpu: !Ref WorkerCpu
+      Memory: !Ref WorkerMemory
+      RequiresCompatibilities: [FARGATE]
+      NetworkMode: awsvpc
+      RuntimePlatform:
+        CpuArchitecture: ARM64
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt WorkerTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt WorkerTaskRole.Arn
+      ContainerDefinitions:
+        - Name: worker
+          Image: !Ref WorkerImageUri
+          Essential: true
+          Environment:
+            - Name: AWS_REGION
+              Value: !Ref AWS::Region
+            - Name: QUEUE_URL
+              Value: !Ref WebhookDeliveryQueue
+            - Name: EVENTS_TABLE
+              Value: !Ref WebhookEventsTable
+            - Name: CONFIGS_TABLE
+              Value: !Ref WebhookConfigsTable
+            - Name: RUST_LOG
+              Value: info
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref WorkerLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+
+  WorkerEcsService:
+    Condition: CreateEcsWorker
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "hooray-relay-worker-${Environment}"
+      Cluster: !Ref WorkerEcsCluster
+      TaskDefinition: !Ref WorkerTaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: !Ref WorkerDesiredCount
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: !Ref WorkerAssignPublicIp
+          SecurityGroups: !Split [",", !Ref EcsSecurityGroupIds]
+          Subnets: !Split [",", !Ref EcsSubnetIds]
 
 # ---------------------------------------------------------------------------
 # Outputs — referenced by both engineers in local testing and CI
@@ -319,3 +478,13 @@ Outputs:
   IngestionApiUrl:
     Description: "API Gateway URL for the ingestion Lambda"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/"
+
+  WorkerEcsClusterName:
+    Condition: CreateEcsWorker
+    Description: "ECS cluster name for worker service"
+    Value: !Ref WorkerEcsCluster
+
+  WorkerEcsServiceName:
+    Condition: CreateEcsWorker
+    Description: "ECS service name for worker"
+    Value: !Ref WorkerEcsService
