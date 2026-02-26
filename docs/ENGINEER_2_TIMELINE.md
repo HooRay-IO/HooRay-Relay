@@ -127,7 +127,7 @@
 
 ### Day 4: SQS Polling & Main Worker Loop
 
-**Goal:** Build the main worker that polls SQS and orchestrates delivery
+**Goal:** Build the main worker service that polls SQS and orchestrates delivery
 
 **Morning (9am-12pm): Worker Structure**
 - [ ] Create `src/main.rs` with Worker struct
@@ -169,41 +169,50 @@
 
 ### Day 5: Integration Testing & Handoff
 
-**Goal:** Test integration with Engineer 1's components and coordinate handoff
+**Goal:** Test integration with Engineer 1's components and deploy the worker as a long-running service
 
 **Morning (9am-12pm): Integration Testing**
 - [ ] Meet with Engineer 1 for integration sync
 - [ ] Verify SQS message format matches expectations
 - [ ] Confirm DynamoDB schemas are correct
-- [ ] Create `tests/end_to_end_test.sh`:
-  - Create test event in DynamoDB
-  - Create webhook config
-  - Send message to SQS
-  - Verify worker processes it
+- [ ] Create `scripts/e2e_ingestion_worker.sh`:
+  - Create webhook config through ingestion API
+  - Submit event through ingestion API
+  - Verify worker writes `ATTEMPT#1`
+  - Verify final event status is `delivered`
+  - Add cleanup for event/config/idempotency test data
 - [ ] Test with real events from Engineer 1's API
 - [ ] Document any issues found
 
-**Afternoon (1pm-5pm): Deploy and Monitor**
-- [ ] Add WorkerFunction to `template.yaml`:
-  - SQS event source
-  - DynamoDB permissions
-  - Environment variables
-- [ ] Build Lambda: `cargo lambda build --release --arm64`
-- [ ] Deploy: `sam build && sam deploy`
-- [ ] Monitor logs: `sam logs --name WorkerFunction --tail`
+**Afternoon (1pm-5pm): Run Worker Service and Monitor**
+- [ ] Prepare runtime environment:
+  - Confirm AWS credentials/profile can access SQS + DynamoDB
+  - Confirm `QUEUE_URL`, `EVENTS_TABLE`, `CONFIGS_TABLE`, `AWS_REGION`
+- [ ] Build and push worker image:
+  - Build image from `worker/Dockerfile`
+  - Push to ECR
+  - Update `WorkerImageUri` tag in `samconfig.local.toml`
+- [ ] Deploy worker ECS service:
+  - Confirm `samconfig.local.toml` has valid `EcsSubnetIds` and `EcsSecurityGroupIds`
+  - Run `./scripts/deploy_dev.sh`
+- [ ] Monitor ECS and logs:
+  - Confirm ECS service/task reaches steady state
+  - Check CloudWatch log group `/ecs/hooray-relay-worker-dev`
+  - Monitor CloudWatch queue metrics
 - [ ] Verify deliveries to webhook.site
 - [ ] Check DynamoDB for delivery attempts
 - [ ] Confirm SQS messages being deleted
+- [ ] Confirm DLQ depth is not increasing during happy-path tests
 - [ ] Write integration test results document
 
 **Deliverables:**
 - Integration with Engineer 1 successful
 - All tests passing
-- Worker deployed to AWS
-- Production monitoring working
+- Worker service running in target environment (non-Lambda)
+- Operational monitoring working
 - Documentation updated
 
-**Commit:** `feat: complete worker integration and deployment`
+**Commit:** `feat: complete worker integration and runtime rollout`
 
 ---
 
@@ -411,7 +420,8 @@ By end of sprint, you should have:
 - [ ] `src/services/delivery.rs` - HTTP delivery
 - [ ] `src/services/signature.rs` - HMAC generation
 - [ ] `src/services/mod.rs` - Service exports
-- [ ] `tests/end_to_end_test.sh` - Integration tests
+- [ ] `worker/tests/end_to_end_test.sh` - Contract integration helper
+- [ ] `scripts/e2e_ingestion_worker.sh` - Full ingestion->worker e2e
 - [ ] `tests/test_dynamodb.sh` - DynamoDB tests
 - [ ] `docs/runbook.md` - Operational guide
 - [ ] `docs/troubleshooting.md` - Common issues
@@ -422,23 +432,23 @@ By end of sprint, you should have:
 ## Emergency Procedures
 
 ### Worker Stopped Processing
-1. Check CloudWatch logs for errors: `sam logs --name WorkerFunction --tail`
+1. Check worker service logs for errors (`journalctl`, container logs, or process logs)
 2. Verify SQS queue has messages: `aws sqs get-queue-attributes --queue-url $QUEUE_URL`
-3. Check IAM permissions on Lambda role
-4. Restart Lambda: Redeploy with `sam deploy`
+3. Check IAM permissions for the worker runtime role/user
+4. Restart worker process or service (systemd/ECS task rollout)
 
 ### High Failure Rate
 1. Check customer endpoint health: `curl -X POST $CUSTOMER_URL`
 2. Review delivery attempt logs in DynamoDB
 3. Verify HMAC signatures are correct
-4. Check network connectivity from Lambda to customer endpoints
+4. Check network connectivity from worker runtime to customer endpoints
 5. Temporarily disable failing endpoint configs
 
 ### Queue Backing Up
-1. Check worker Lambda concurrency: May need to increase
-2. Monitor Lambda errors: Fix any code issues
+1. Check worker replica/process count: scale out if needed
+2. Monitor worker errors: Fix any code issues
 3. Check DynamoDB throttling: May need provisioned capacity
-4. Consider temporarily scaling up Lambda memory/timeout
+4. Consider increasing worker CPU/memory limits in runtime platform
 
 ---
 
@@ -449,7 +459,6 @@ By end of sprint, you should have:
 **AWS Documentation:**
 - [DynamoDB Developer Guide](https://docs.aws.amazon.com/dynamodb/)
 - [SQS Developer Guide](https://docs.aws.amazon.com/sqs/)
-- [Lambda Developer Guide](https://docs.aws.amazon.com/lambda/)
 
 **Project Dictionary:** See `PROJECT_DICTIONARY.md` for complete schemas, architecture, and patterns
 

@@ -848,23 +848,14 @@ See full template in Infrastructure section above.
 ### Build and Deploy
 
 ```bash
-# Build Rust Lambda functions
-cd ingestion
-cargo lambda build --release --arm64
-cd ../worker
-cargo lambda build --release --arm64
-cd ..
-
-# Deploy with SAM
+# Build and deploy ingestion/shared infra with SAM
 sam build
-sam deploy --guided
+sam deploy --resolve-s3
 
-# Follow prompts:
-# - Stack Name: webhook-relay-mvp
-# - AWS Region: us-east-1
-# - Confirm changes: Y
-# - Allow SAM CLI IAM role creation: Y
-# - Save arguments to config: Y
+# For ECS worker-enabled deploys (local/dev):
+# 1) set account-specific values in samconfig.local.toml
+# 2) deploy with helper script
+./scripts/deploy_dev.sh
 ```
 
 ### Environment Variables
@@ -873,11 +864,11 @@ Create `.env` file for local testing:
 
 ```bash
 # .env
-AWS_REGION=us-east-1
-EVENTS_TABLE=webhook_events
-IDEMPOTENCY_TABLE=webhook_idempotency
-CONFIGS_TABLE=webhook_configs
-DELIVERY_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123456789/webhook-delivery
+AWS_REGION=us-west-2
+EVENTS_TABLE=webhook_events_dev
+IDEMPOTENCY_TABLE=webhook_idempotency_dev
+CONFIGS_TABLE=webhook_configs_dev
+QUEUE_URL=https://sqs.us-west-2.amazonaws.com/<account-id>/webhook_delivery_dev
 LOG_LEVEL=info
 ```
 
@@ -978,17 +969,17 @@ aws dynamodb get-item \
 ```bash
 # Send test message
 aws sqs send-message \
-  --queue-url https://sqs.us-east-1.amazonaws.com/123/webhook-delivery \
+  --queue-url https://sqs.us-west-2.amazonaws.com/<account-id>/webhook_delivery_dev \
   --message-body "evt_test123"
 
 # Check queue depth
 aws sqs get-queue-attributes \
-  --queue-url https://sqs.us-east-1.amazonaws.com/123/webhook-delivery \
+  --queue-url https://sqs.us-west-2.amazonaws.com/<account-id>/webhook_delivery_dev \
   --attribute-names ApproximateNumberOfMessages
 
 # Purge queue (testing only!)
 aws sqs purge-queue \
-  --queue-url https://sqs.us-east-1.amazonaws.com/123/webhook-delivery
+  --queue-url https://sqs.us-west-2.amazonaws.com/<account-id>/webhook_delivery_dev
 ```
 
 ### Logs
@@ -998,7 +989,7 @@ aws sqs purge-queue \
 sam logs --stack-name webhook-relay-mvp --name IngestionFunction --tail
 
 # Tail worker logs
-sam logs --stack-name webhook-relay-mvp --name WorkerFunction --tail
+journalctl -u webhook-worker -f
 
 # Query logs
 aws logs filter-log-events \

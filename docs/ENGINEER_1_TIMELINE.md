@@ -18,7 +18,7 @@
 **Morning (9am-12pm): AWS Setup**
 - [ ] Create AWS SAM project structure
 - [ ] Create `template.yaml` with DynamoDB tables, SQS queue, Lambda function placeholders
-- [ ] Deploy infrastructure with `sam deploy --guided`
+- [ ] Deploy infrastructure with `sam build && sam deploy --resolve-s3`
 - [ ] Verify all resources created successfully
 
 **Afternoon (1pm-5pm): Rust Project Setup**
@@ -131,7 +131,7 @@
 
 **Morning (9am-12pm): Integration Tests**
 - [ ] Create `tests/integration_test.sh` script
-- [ ] Deploy to AWS with `cargo lambda build` and `sam deploy`
+- [ ] Deploy to AWS with `sam build` and `sam deploy --resolve-s3`
 - [ ] Run integration tests against deployed API
 - [ ] Verify:
   - Config creation works

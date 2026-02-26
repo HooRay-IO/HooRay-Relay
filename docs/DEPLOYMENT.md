@@ -20,7 +20,7 @@ All tools confirmed installed and working on this machine:
 
 ### `samconfig.toml`
 
-Pre-configured deployment defaults (committed, do not edit locally):
+Pre-configured shared defaults (committed, safe for CI):
 
 ```toml
 version = 0.1
@@ -30,9 +30,18 @@ stack_name        = "hooray-dev"
 region            = "us-west-2"
 profile           = "hooray-dev"     # ← AWS profile name (see Step 3b)
 confirm_changeset = true
-capabilities      = "CAPABILITY_IAM"
+capabilities      = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
 disable_rollback  = false
-parameter_overrides = "Environment=dev SqsVisibilityTimeoutSeconds=60 SqsMaxReceiveCount=4"
+parameter_overrides = "Environment=dev SqsVisibilityTimeoutSeconds=60 SqsMaxReceiveCount=4 EnableEcsWorker=false"
+```
+
+### `samconfig.local.toml` (local only)
+
+Account-specific ECS values should live in local config, not in committed config.
+
+```bash
+cp samconfig.local.toml.example samconfig.local.toml
+# Edit WorkerImageUri, EcsSubnetIds, EcsSecurityGroupIds, and profile as needed.
 ```
 
 ### `template.yaml`
@@ -48,16 +57,16 @@ SAM template that provisions all AWS infrastructure on deploy:
 | `webhook_delivery_dlq_dev` | SQS DLQ | 14-day retention |
 | `DLQDepthAlarm` | CloudWatch | Fires when DLQ depth > 0 |
 | `IngestionFunction` | Lambda | arm64/al2023, built from `ingestion/` |
-| `WorkerFunction` | Lambda | arm64/al2023, built from `worker/` |
 
 ### `Makefile`
 
 ```makefile
-build-IngestionFunction:  # cargo build -p ingestion → $ARTIFACTS_DIR/bootstrap
-build-WorkerFunction:     # cargo build -p worker    → $ARTIFACTS_DIR/bootstrap
+build-IngestionFunction:  # cargo lambda build -p ingestion --arm64 → $ARTIFACTS_DIR/bootstrap
+package-worker:           # cargo build -p worker --release (non-Lambda runtime)
 ```
 
-`sam build` calls these automatically — no manual `cargo` invocation needed.
+`sam build` calls `build-IngestionFunction` automatically.
+The worker is not deployed via SAM as Lambda in the current architecture.
 
 ### `.envrc.example`
 
@@ -119,7 +128,6 @@ source "$HOME/.cargo/env"
 sam build
 # Expected: "Build Succeeded"
 # Artifacts: .aws-sam/build/IngestionFunction/bootstrap
-#            .aws-sam/build/WorkerFunction/bootstrap
 ```
 
 ### Step 3e — First deploy ⏳ PENDING
@@ -152,9 +160,80 @@ Expected outputs: `EventsTableName`, `IdempotencyTableName`, `ConfigsTableName`,
 sam build && sam deploy
 ```
 
----
+For ECS worker-enabled deploys (local/dev), use local overrides:
 
-## 5. Running Tests Locally (No AWS Credentials Required)
+```bash
+./scripts/deploy_dev.sh
+```
+
+This script uses `samconfig.local.toml` and keeps account-specific values out of CI.
+
+### Known-Good ECS Deploy Checklist (validated on February 26, 2026)
+
+1. Ensure worker image tag exists in ECR.
+
+```bash
+aws ecr describe-images \
+  --region us-west-2 \
+  --repository-name hooray-relay-worker-dev \
+  --image-ids imageTag=<IMAGE_TAG>
+```
+
+2. Set `WorkerImageUri` in `samconfig.local.toml` to that exact tag.
+
+3. Deploy with local config:
+
+```bash
+./scripts/deploy_dev.sh
+```
+
+4. Verify ECS service health:
+
+```bash
+aws ecs describe-services \
+  --region us-west-2 \
+  --profile hooray-dev \
+  --cluster hooray-relay-worker-dev \
+  --services hooray-relay-worker-dev \
+  --query "services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,rollout:deployments[0].rolloutState}" \
+  --output table
+```
+
+Expected result: `desired=1`, `running=1`, `pending=0`, `rollout=COMPLETED`.
+
+## 5. Worker Deployment (ECS/Fargate Recommended)
+
+Default recommendation: deploy worker container on ECS/Fargate.
+
+Build worker binary locally (optional local validation):
+
+```bash
+cargo build --release -p worker --bin worker
+```
+
+Run worker:
+
+```bash
+RUST_LOG=info ./target/release/worker
+```
+
+Required worker environment variables:
+- `AWS_REGION`
+- `QUEUE_URL` (or `WEBHOOK_QUEUE_URL`)
+- `EVENTS_TABLE` (or `WEBHOOK_EVENTS_TABLE`)
+- `CONFIGS_TABLE` (or `WEBHOOK_CONFIGS_TABLE`)
+
+Container build file:
+- `worker/Dockerfile`
+
+Primary rollout steps (ECS):
+1. Build + push image to ECR.
+2. Create ECS task definition with required env vars and IAM task role.
+3. Run ECS service (desired count `1` for MVP), then add autoscaling by SQS depth.
+
+See `docs/WORKER_RUNTIME.md` for exact commands and e2e checks.
+
+## 6. Running Tests Locally (No AWS Credentials Required)
 
 ```bash
 source "$HOME/.cargo/env"
