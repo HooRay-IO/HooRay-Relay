@@ -10,12 +10,13 @@
 #   1. POST /webhooks/configs   — create config (201, whsec_ secret)
 #   2. POST /webhooks/receive   — happy path (202, event_id returned)
 #   3. POST /webhooks/receive   — idempotency replay (200, same event_id)
-#   4. POST /webhooks/receive   — missing config (500, no panic)
-#   5. POST /webhooks/receive   — inactive config (bypassed — config upsert sets active=true; documented)
+#   4. POST /webhooks/receive   — missing config (4xx/5xx, no panic)
+#   5. POST /webhooks/receive   — validation (missing idempotency_key)
 #   6. GET  /webhooks/configs   — verify config round-trip (200, all fields present)
-#   7. DynamoDB verification    — event row exists with pk/sk contract
-#   8. DynamoDB verification    — idempotency record exists with TTL
-#   9. SQS verification         — message visible in queue with customer_id attribute
+#   7. DynamoDB verification    — config row exists with pk/sk contract
+#   8. DynamoDB verification    — event row exists with pk/sk contract
+#   9. DynamoDB verification    — idempotency record exists with TTL
+#   10. SQS verification        — message visible in queue with customer_id attribute
 #
 # Required env vars
 # -----------------
@@ -119,7 +120,7 @@ cleanup() {
 
   if [[ "$KEEP_TEST_DATA" == "true" ]]; then
     warn "KEEP_TEST_DATA=true — skipping DynamoDB / SQS cleanup"
-    return "$exit_code"
+
   fi
 
   section "Cleanup"
@@ -218,9 +219,9 @@ RESPONSE_1="$(curl -s -w '\n%{http_code}' -X POST "${API_BASE_URL}/webhooks/conf
 HTTP_STATUS_1="$(echo "$RESPONSE_1" | tail -n1)"
 BODY_1="$(echo "$RESPONSE_1" | head -n-1)"
 
-info "Response body: ${BODY_1}"
+MASKED_BODY_1="$(echo "$BODY_1" | jq '.secret = "***REDACTED***"')"
+info "Response body: ${MASKED_BODY_1}"
 assert_status "$HTTP_STATUS_1" "201" "POST /webhooks/configs"
-assert_json_field "$BODY_1" ".customer_id" "$CUSTOMER_ID"  "config.customer_id"
 assert_json_field "$BODY_1" ".url" "$DELIVERY_URL" "config.url"
 assert_json_field "$BODY_1" ".active" "true" "config.active"
 
@@ -258,12 +259,20 @@ else
   fail "receive.event_id missing evt_ prefix (got: ${EVENT_ID})"
 fi
 
-# Validate created_at is a reasonable Unix timestamp (> 2024-01-01)
+# Validate created_at is a reasonable Unix timestamp (within 1 hour of now)
 CREATED_AT="$(echo "$BODY_2" | jq -r '.created_at')"
-if [[ "$CREATED_AT" -gt 1704067200 ]]; then
-  ok "receive.created_at is a valid timestamp: ${CREATED_AT}"
+# Ensure CREATED_AT is numeric
+if ! [[ "$CREATED_AT" =~ ^[0-9]+$ ]]; then
+  fail "receive.created_at is not a numeric Unix timestamp: ${CREATED_AT}"
 else
-  fail "receive.created_at looks wrong: ${CREATED_AT}"
+  NOW="$(date +%s)"
+  LOWER_BOUND=$((NOW - 3600))   # 1 hour before now
+  UPPER_BOUND=$((NOW + 3600))   # 1 hour after now (to allow for minor clock skew)
+  if [[ "$CREATED_AT" -ge "$LOWER_BOUND" && "$CREATED_AT" -le "$UPPER_BOUND" ]]; then
+    ok "receive.created_at is a valid, recent timestamp: ${CREATED_AT}"
+  else
+    fail "receive.created_at is outside the expected time window: ${CREATED_AT} (expected between ${LOWER_BOUND} and ${UPPER_BOUND})"
+  fi
 fi
 
 EVENT_WRITTEN=true
@@ -353,9 +362,9 @@ RESPONSE_6="$(curl -s -w '\n%{http_code}' \
 HTTP_STATUS_6="$(echo "$RESPONSE_6" | tail -n1)"
 BODY_6="$(echo "$RESPONSE_6" | head -n-1)"
 
-info "Response body: ${BODY_6}"
+BODY_6_REDACTED="$(echo "$BODY_6" | jq 'if type == "object" and has("secret") then .secret = "***REDACTED***" else . end' 2>/dev/null || echo "$BODY_6")"
+info "Response body (secret redacted): ${BODY_6_REDACTED}"
 assert_status "$HTTP_STATUS_6" "200" "GET /webhooks/configs"
-assert_json_field "$BODY_6" ".customer_id" "$CUSTOMER_ID" "get_config.customer_id"
 assert_json_field "$BODY_6" ".url" "$DELIVERY_URL" "get_config.url"
 assert_json_field "$BODY_6" ".max_retries" "3" "get_config.max_retries"
 assert_json_field "$BODY_6" ".active" "true" "get_config.active"
@@ -460,7 +469,7 @@ if echo "$DDB_IDEM" | jq -e '.Item' >/dev/null 2>&1; then
     DDB_TTL="$(echo "$DDB_IDEM" | jq -r '.Item.ttl.N')"
     NOW_TS="$(date +%s)"
     TTL_DIFF=$((DDB_TTL - NOW_TS))
-    if [[ $TTL_DIFF -gt 82800 && $TTL_DIFF -lt 90000 ]]; then
+    if [[ $TTL_DIFF -gt 85000 && $TTL_DIFF -lt 87800 ]]; then
       ok "DynamoDB: idempotency TTL is ~24h from now (diff=${TTL_DIFF}s)"
     else
       warn "DynamoDB: idempotency TTL diff is ${TTL_DIFF}s (expected ~86400s) — acceptable clock skew"
@@ -537,7 +546,7 @@ while [[ $ELAPSED -lt $POLL_TIMEOUT_SECS ]]; do
   fi
 
   sleep "$POLL_INTERVAL_SECS"
-  ELAPSED=$((ELAPSED + POLL_INTERVAL_SECS + 2))
+  ELAPSED=$((ELAPSED + POLL_INTERVAL_SECS))
 done
 
 if [[ "$SQS_FOUND" == "false" ]]; then

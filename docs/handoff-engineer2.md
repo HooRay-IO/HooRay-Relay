@@ -462,6 +462,9 @@ signing_str = "1707840000.{"order_id":"ord_123","amount":99.99}"
 header      = "sha256=a3b4c5d6..."
 ```
 
+Note: the payload used for signing is the exact string stored in the DynamoDB
+`payload` field (for example, the `event.payload` string), without any additional
+escaping, re-serialization, or formatting changes.
 ---
 
 ## 8. Integration Test Acceptance Criteria
