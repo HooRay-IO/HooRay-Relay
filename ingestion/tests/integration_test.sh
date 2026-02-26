@@ -42,7 +42,7 @@
 #   export EVENTS_TABLE="webhook_events_dev"
 #   export IDEMPOTENCY_TABLE="webhook_idempotency_dev"
 #   export CONFIGS_TABLE="webhook_configs_dev"
-#   export QUEUE_URL="https://sqs.us-east-1.amazonaws.com/520819257503/webhook_delivery_dev"
+#   export QUEUE_URL="https://sqs.us-east-1.amazonaws.com/<account-id>/webhook_delivery_dev"
 #   bash ingestion/tests/integration_test.sh
 # =============================================================================
 set -euo pipefail

@@ -369,7 +369,7 @@ aws dynamodb get-item \
 ```bash
 aws sqs get-queue-attributes \
   --region "$AWS_REGION" \
-  --queue-url "https://sqs.${AWS_REGION}.amazonaws.com/520819257503/webhook_delivery_dlq_dev" \
+  --queue-url "https://sqs.${AWS_REGION}.amazonaws.com/<account-id>/webhook_delivery_dlq_dev" \
   --attribute-names ApproximateNumberOfMessagesVisible \
   --output json
 ```
