@@ -1,0 +1,31 @@
+{
+  "family": "hooray-relay-worker",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "${CPU}",
+  "memory": "${MEMORY}",
+  "executionRoleArn": "${WORKER_EXECUTION_ROLE_ARN}",
+  "taskRoleArn": "${WORKER_TASK_ROLE_ARN}",
+  "containerDefinitions": [
+    {
+      "name": "${CONTAINER_NAME}",
+      "image": "${WORKER_IMAGE_URI}",
+      "essential": true,
+      "environment": [
+        { "name": "AWS_REGION", "value": "${AWS_REGION}" },
+        { "name": "QUEUE_URL", "value": "${QUEUE_URL}" },
+        { "name": "EVENTS_TABLE", "value": "${EVENTS_TABLE}" },
+        { "name": "CONFIGS_TABLE", "value": "${CONFIGS_TABLE}" },
+        { "name": "RUST_LOG", "value": "info" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "${LOG_GROUP_NAME}",
+          "awslogs-region": "${AWS_REGION}",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

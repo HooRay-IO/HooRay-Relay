@@ -85,6 +85,11 @@ async fn main() -> Result<(), lambda_http::Error> {
         .route("/webhooks/receive", post(receive_webhook))
         .route("/webhooks/configs", post(create_config))
         .route("/webhooks/configs", get(get_config))
+        // API Gateway REST/Lambda sometimes forwards stage-prefixed paths
+        // (for example, `/Prod/webhooks/...`) to the handler.
+        .route("/{stage}/webhooks/receive", post(receive_webhook))
+        .route("/{stage}/webhooks/configs", post(create_config))
+        .route("/{stage}/webhooks/configs", get(get_config))
         .with_state(state);
 
     // ------------------------------------------------------------------

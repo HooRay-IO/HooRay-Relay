@@ -16,25 +16,25 @@
 **Goal:** Set up development environment and understand what Engineer 1 is building
 
 **Morning (9am-12pm): Environment Setup**
-- [ ] Clone repository (if not done)
-- [ ] Initialize Rust worker project in `worker/` directory
-- [ ] Update `Cargo.toml` with all dependencies:
+- [x] Clone repository (if not done)
+- [x] Initialize Rust worker project in `worker/` directory
+- [x] Update `Cargo.toml` with all dependencies:
   - AWS SDK (DynamoDB, SQS)
   - HTTP client (reqwest)
   - Crypto (hmac, sha2, hex)
   - Utilities and logging
-- [ ] Create project structure (models, services directories)
+- [x] Create project structure (models, services directories)
 
 **Afternoon (1pm-5pm): Study Integration Points**
-- [ ] Create `src/models.rs` with data structures:
+- [x] Create `src/models.rs` with data structures:
   - Event (from DynamoDB)
   - EventStatus enum
   - WebhookConfig
   - DeliveryAttempt
   - DeliveryResult
   - WorkerError
-- [ ] Write unit test for event deserialization
-- [ ] Document integration expectations from Engineer 1:
+- [x] Write unit test for event deserialization
+- [x] Document integration expectations from Engineer 1:
   - SQS message format
   - DynamoDB table structures
   - Expected fields and types
@@ -55,23 +55,23 @@
 **Goal:** Build service layer to fetch events and configs from DynamoDB
 
 **Morning (9am-12pm): Event Fetching**
-- [ ] Create `src/services/dynamodb.rs`
-- [ ] Implement `DynamoService` struct with table names
-- [ ] Implement `get_event()` to fetch event by ID
-- [ ] Implement `get_config()` to fetch webhook config
-- [ ] Add helper functions:
+- [x] Create `src/services/dynamodb.rs`
+- [x] Implement `DynamoService` struct with table names
+- [x] Implement `get_event()` to fetch event by ID
+- [x] Implement `get_config()` to fetch webhook config
+- [x] Add helper functions:
   - `get_string_attr()`
   - `get_number_attr()`
   - `get_bool_attr()`
   - `parse_status()`
-- [ ] Test compilation
+- [x] Test compilation
 
 **Afternoon (1pm-5pm): Attempt Recording & Status Updates**
-- [ ] Implement `record_attempt()` to store delivery attempts
-- [ ] Implement `update_event_status()` for status transitions
-- [ ] Implement `increment_attempt_count()` for retries
-- [ ] Add comprehensive logging
-- [ ] Create test script `tests/test_dynamodb.sh`
+- [x] Implement `record_attempt()` to store delivery attempts
+- [x] Implement `update_event_status()` for status transitions
+- [x] Implement `increment_attempt_count()` for retries
+- [x] Add comprehensive logging
+- [x] Create test script `tests/test_dynamodb.sh`
 - [ ] Create test data in DynamoDB
 - [ ] Verify can fetch test data
 
@@ -90,28 +90,28 @@
 **Goal:** Build signature generation and HTTP delivery logic
 
 **Morning (9am-12pm): HMAC Signature Service**
-- [ ] Create `src/services/signature.rs`
-- [ ] Implement `SignatureService::generate()`:
+- [x] Create `src/services/signature.rs`
+- [x] Implement `SignatureService::generate()`:
   - Create signing string: `<X-Webhook-Timestamp> + "." + <raw request body JSON>`
   - Generate HMAC-SHA256
   - Format as "sha256={hex}"
-- [ ] Implement `SignatureService::verify()` for testing
-- [ ] Write unit tests:
+- [x] Implement `SignatureService::verify()` for testing
+- [x] Write unit tests:
   - Signature format validation
   - Signature verification
   - Wrong secret/payload fails
 
 **Afternoon (1pm-5pm): HTTP Delivery Service**
-- [ ] Create `src/services/delivery.rs`
-- [ ] Implement `DeliveryService::deliver()`:
+- [x] Create `src/services/delivery.rs`
+- [x] Implement `DeliveryService::deliver()`:
   - Generate HMAC signature
   - Set `X-Webhook-Timestamp` using the exact timestamp used for signing
   - Set proper headers
   - Make HTTP POST request
   - Handle timeouts (30s)
   - Return DeliveryAttempt result
-- [ ] Implement `classify_error()` helper
-- [ ] Create `src/services/mod.rs`
+- [x] Implement `classify_error()` helper
+- [x] Create `src/services/mod.rs`
 - [ ] Write integration test with webhook.site
 - [ ] Verify successful delivery
 
@@ -130,22 +130,22 @@
 **Goal:** Build the main worker service that polls SQS and orchestrates delivery
 
 **Morning (9am-12pm): Worker Structure**
-- [ ] Create `src/main.rs` with Worker struct
-- [ ] Implement `Worker::new()` constructor
-- [ ] Implement `run()` infinite loop
-- [ ] Implement `poll_and_process()`:
+- [x] Create `src/main.rs` with Worker struct
+- [x] Implement `Worker::new()` constructor
+- [x] Implement `run()` infinite loop
+- [x] Implement `poll_and_process()`:
   - Long poll SQS (20s wait)
   - Process up to 10 messages
   - Handle empty responses
-- [ ] Add structured JSON logging
+- [x] Add structured JSON logging
 
 **Afternoon (1pm-5pm): Message Processing & Delivery Logic**
-- [ ] Implement `process_message()`:
+- [x] Implement `process_message()`:
   - Extract event_id and receipt_handle
   - Call deliver_event()
   - Handle Success/Retry/Exhausted results
   - Delete message on success
-- [ ] Implement `deliver_event()`:
+- [x] Implement `deliver_event()`:
   - Fetch event from DynamoDB
   - Fetch config from DynamoDB
   - Check config is active
@@ -153,9 +153,9 @@
   - Record attempt
   - Update status
   - Determine retry vs exhausted
-- [ ] Implement `delete_message()` for SQS
+- [x] Implement `delete_message()` for SQS
 - [ ] Test locally with environment variables
-- [ ] Verify compilation
+- [x] Verify compilation
 
 **Deliverables:**
 - Main worker loop complete

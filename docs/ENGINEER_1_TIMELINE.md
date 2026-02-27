@@ -16,17 +16,17 @@
 **Goal:** Get AWS infrastructure ready and create all DynamoDB tables
 
 **Morning (9am-12pm): AWS Setup**
-- [ ] Create AWS SAM project structure
-- [ ] Create `template.yaml` with DynamoDB tables, SQS queue, Lambda function placeholders
-- [ ] Deploy infrastructure with `sam build && sam deploy --resolve-s3`
-- [ ] Verify all resources created successfully
+- [x] Create AWS SAM project structure
+- [x] Create `template.yaml` with DynamoDB tables, SQS queue, Lambda function placeholders
+- [x] Deploy infrastructure with `sam deploy --guided`
+- [x] Verify all resources created successfully
 
 **Afternoon (1pm-5pm): Rust Project Setup**
-- [ ] Initialize Rust ingestion project
-- [ ] Update `Cargo.toml` with all dependencies
-- [ ] Create project structure (handlers, models, services)
-- [ ] Define data models in `src/models.rs`
-- [ ] Initialize git repository with first commit
+- [x] Initialize Rust ingestion project
+- [x] Update `Cargo.toml` with all dependencies
+- [x] Create project structure (handlers, models, services)
+- [x] Define data models in `src/models.rs`
+- [x] Initialize git repository with first commit
 
 **Deliverables:**
 - AWS infrastructure deployed
@@ -43,18 +43,18 @@
 **Goal:** Implement idempotency checking and event storage logic
 
 **Morning (9am-12pm): Idempotency Service**
-- [ ] Create `src/services/idempotency.rs`
-- [ ] Implement `check_and_record()` with conditional DynamoDB writes
-- [ ] Implement `get_existing_event_id()` for duplicate detection
-- [ ] Add helper function `is_conditional_check_failed()`
-- [ ] Write unit tests for event ID format
+- [x] Create `src/services/idempotency.rs`
+- [x] Implement `check_and_record()` with conditional DynamoDB writes
+- [x] Implement `get_existing_event_id()` for duplicate detection
+- [x] Add helper function `is_conditional_check_failed()`
+- [x] Write unit tests for event ID format
 
 **Afternoon (1pm-5pm): Event Storage Service**
-- [ ] Create `src/services/events.rs`
-- [ ] Implement `create_event()` with 30-day TTL
-- [ ] Add JSON payload serialization
-- [ ] Create `src/services/mod.rs` to export services
-- [ ] Verify code compiles successfully
+- [x] Create `src/services/events.rs`
+- [x] Implement `create_event()` with 30-day TTL
+- [x] Add JSON payload serialization
+- [x] Create `src/services/mod.rs` to export services
+- [x] Verify code compiles successfully
 
 **Deliverables:**
 - Idempotency service complete
@@ -70,21 +70,21 @@
 **Goal:** Complete the ingestion pipeline with SQS queuing
 
 **Morning (9am-12pm): Queue Service**
-- [ ] Create `src/services/queue.rs`
-- [ ] Implement `enqueue_event()` with customer_id message attribute
-- [ ] Add structured logging for queue operations
-- [ ] Test queue service compilation
+- [x] Create `src/services/queue.rs`
+- [x] Implement `enqueue_event()` with customer_id message attribute
+- [x] Add structured logging for queue operations
+- [x] Test queue service compilation
 
 **Afternoon (1pm-5pm): Webhook Handler**
-- [ ] Create `src/handlers/webhook.rs`
-- [ ] Implement `receive_webhook()` with full pipeline:
+- [x] Create `src/handlers/webhook.rs`
+- [x] Implement `receive_webhook()` with full pipeline:
   - Request validation
   - Idempotency check
   - Event creation
   - SQS enqueuing
-- [ ] Add error handling for all failure cases
-- [ ] Create `src/handlers/mod.rs`
-- [ ] Test handler logic
+- [x] Add error handling for all failure cases
+- [x] Create `src/handlers/mod.rs`
+- [x] Test handler logic
 
 **Deliverables:**
 - SQS queue service implemented
@@ -101,19 +101,19 @@
 **Goal:** Add webhook configuration CRUD and Lambda integration
 
 **Morning (9am-12pm): Config Handlers**
-- [ ] Create `src/handlers/config.rs`
-- [ ] Implement `create_config()` with auto-generated secrets
-- [ ] Implement `get_config()` with query parameters
-- [ ] Add proper error responses (404, 500)
-- [ ] Test config handlers
+- [x] Create `src/handlers/config.rs`
+- [x] Implement `create_config()` with auto-generated secrets
+- [x] Implement `get_config()` with query parameters
+- [x] Add proper error responses (404, 500)
+- [x] Test config handlers
 
 **Afternoon (1pm-5pm): Lambda Main Entry Point**
-- [ ] Create `src/main.rs` with Lambda integration
-- [ ] Set up Axum router with all endpoints
-- [ ] Initialize AWS clients and services
-- [ ] Add structured JSON logging
-- [ ] Build and test locally with `cargo lambda watch`
-- [ ] Test endpoints with curl
+- [x] Create `src/main.rs` with Lambda integration
+- [x] Set up Axum router with all endpoints
+- [x] Initialize AWS clients and services
+- [x] Add structured JSON logging
+- [x] Build and test locally with `cargo lambda watch`
+- [x] Test endpoints with curl
 
 **Deliverables:**
 - Config CRUD handlers complete
