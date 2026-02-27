@@ -27,11 +27,6 @@ export INGESTION_API_URL=$(aws cloudformation describe-stacks \
   --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='IngestionApiUrl'].OutputValue" \
   --output text)
-export WORKER_FN=$(aws cloudformation describe-stack-resources \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
-  --logical-resource-id "WorkerFunction" \
-  --query "StackResources[0].PhysicalResourceId" \
-  --output text)
 
 # Backward-compatible aliases for older scripts
 export WEBHOOK_EVENTS_TABLE="$EVENTS_TABLE"
