@@ -131,7 +131,7 @@
 
 **Morning (9am-12pm): Integration Tests**
 - [ ] Create `tests/integration_test.sh` script
-- [ ] Deploy to AWS with `cargo lambda build` and `sam deploy`
+- [ ] Deploy to AWS with `sam build` and `sam deploy --resolve-s3`
 - [ ] Run integration tests against deployed API
 - [ ] Verify:
   - Config creation works

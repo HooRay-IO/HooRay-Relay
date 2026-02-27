@@ -36,3 +36,10 @@ coverage/
 
 # Lambda/SAM local artifacts
 .aws-sam/
+
+# Local SAM deploy config overrides
+samconfig.local.toml
+
+# Local Zig caches (used by cargo-lambda cross-compilation)
+.zig-cache/
+.zig-global-cache/
