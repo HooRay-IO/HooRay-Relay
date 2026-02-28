@@ -241,14 +241,14 @@ impl Worker {
                 if let Some(attributes) = output.attributes()
                     && let Some(raw_depth) =
                         attributes.get(&sqs::types::QueueAttributeName::ApproximateNumberOfMessages)
-                    {
-                        match raw_depth.parse::<i64>() {
-                            Ok(depth) => self.observability.emit_queue_depth(depth),
-                            Err(err) => {
-                                warn!(error = %err, value = %raw_depth, "failed to parse queue depth")
-                            }
+                {
+                    match raw_depth.parse::<i64>() {
+                        Ok(depth) => self.observability.emit_queue_depth(depth),
+                        Err(err) => {
+                            warn!(error = %err, value = %raw_depth, "failed to parse queue depth")
                         }
                     }
+                }
             }
             Err(err) => warn!(error = %err, "failed to sample queue depth"),
         }
