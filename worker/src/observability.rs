@@ -15,7 +15,8 @@ pub struct Observability {
 
 impl Observability {
     pub fn new(queue_url: &str) -> Self {
-        let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| DEFAULT_ENVIRONMENT.to_string());
+        let environment =
+            env::var("ENVIRONMENT").unwrap_or_else(|_| DEFAULT_ENVIRONMENT.to_string());
         let namespace =
             env::var("METRIC_NAMESPACE").unwrap_or_else(|_| DEFAULT_METRIC_NAMESPACE.to_string());
 
@@ -26,7 +27,12 @@ impl Observability {
         }
     }
 
-    pub fn emit_delivery_attempt(&self, event: &Event, attempt: &DeliveryAttempt, result: &DeliveryResult) {
+    pub fn emit_delivery_attempt(
+        &self,
+        event: &Event,
+        attempt: &DeliveryAttempt,
+        result: &DeliveryResult,
+    ) {
         let result_text = result.as_metric_label();
         let status_code = attempt
             .http_status
@@ -91,14 +97,17 @@ impl Observability {
         self.emit_metric("webhook.queue.depth", "Count", depth as f64, &dimensions);
     }
 
-    fn emit_metric(&self, metric_name: &str, unit: &str, value: f64, dimensions: &[(String, String)]) {
-        println!("{}", build_metric_payload(
-            &self.namespace,
-            metric_name,
-            unit,
-            value,
-            dimensions,
-        ));
+    fn emit_metric(
+        &self,
+        metric_name: &str,
+        unit: &str,
+        value: f64,
+        dimensions: &[(String, String)],
+    ) {
+        println!(
+            "{}",
+            build_metric_payload(&self.namespace, metric_name, unit, value, dimensions,)
+        );
     }
 }
 
@@ -168,8 +177,7 @@ mod tests {
 
     #[test]
     fn queue_name_parser_extracts_name() {
-        let queue_url =
-            "https://sqs.us-west-2.amazonaws.com/123456789012/webhook_delivery_dev";
+        let queue_url = "https://sqs.us-west-2.amazonaws.com/123456789012/webhook_delivery_dev";
         assert_eq!(queue_name_from_url(queue_url), "webhook_delivery_dev");
     }
 
