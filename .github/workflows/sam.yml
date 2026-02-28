@@ -36,6 +36,9 @@ jobs:
       - name: Setup SAM CLI
         uses: aws-actions/setup-sam@v2
 
+      - name: Install cargo-lambda
+        uses: cargo-lambda/setup-cargo-lambda@v2
+
       - name: Validate SAM template
         run: sam validate --lint
 
