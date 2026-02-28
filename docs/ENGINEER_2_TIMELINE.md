@@ -175,7 +175,7 @@
 - [ ] Meet with Engineer 1 for integration sync
 - [ ] Verify SQS message format matches expectations
 - [ ] Confirm DynamoDB schemas are correct
-- [ ] Create `scripts/e2e_ingestion_worker.sh`:
+- [x] Create `scripts/e2e_ingestion_worker.sh`:
   - Create webhook config through ingestion API
   - Submit event through ingestion API
   - Verify worker writes `ATTEMPT#1`
@@ -188,7 +188,7 @@
 - [ ] Prepare runtime environment:
   - Confirm AWS credentials/profile can access SQS + DynamoDB
   - Confirm `QUEUE_URL`, `EVENTS_TABLE`, `CONFIGS_TABLE`, `AWS_REGION`
-- [ ] Build and push worker image:
+- [x] Build and push worker image:
   - Build image from `worker/Dockerfile`
   - Push to ECR
   - Update `WorkerImageUri` tag in `samconfig.local.toml`
@@ -223,26 +223,26 @@
 **Goal:** Add comprehensive monitoring for delivery pipeline
 
 **Tasks:**
-- [ ] Add CloudWatch metrics emission:
+- [x] Add CloudWatch metrics emission:
   - DeliveryAttempts (count)
   - DeliverySuccess (count)
   - DeliveryFailure (count)
   - DeliveryLatency (milliseconds)
   - HTTPStatusCode (by status)
-- [ ] Create CloudWatch dashboard for worker:
+- [x] Create CloudWatch dashboard for worker:
   - Success/failure rates
   - Latency percentiles
   - Error breakdown
   - Queue depth over time
-- [ ] Set up alarms:
+- [x] Set up alarms:
   - High failure rate (>10%)
   - High latency (p95 >5s)
   - DLQ messages present
 - [ ] Test alarms trigger correctly
 
 **Deliverables:**
-- Metrics emitting properly
-- Dashboard operational
+- [x] Metrics emitting properly
+- [x] Dashboard operational
 - Alarms configured and tested
 
 **Commit:** `feat: add CloudWatch monitoring for delivery worker`
@@ -414,15 +414,15 @@ By end of Week 2, verify:
 ## Key Files Checklist
 
 By end of sprint, you should have:
-- [ ] `src/main.rs` - Worker main loop
+- [x] `src/main.rs` - Worker main loop
 - [ ] `src/models.rs` - Data structures
-- [ ] `src/services/dynamodb.rs` - DynamoDB operations
-- [ ] `src/services/delivery.rs` - HTTP delivery
-- [ ] `src/services/signature.rs` - HMAC generation
-- [ ] `src/services/mod.rs` - Service exports
-- [ ] `worker/tests/end_to_end_test.sh` - Contract integration helper
-- [ ] `scripts/e2e_ingestion_worker.sh` - Full ingestion->worker e2e
-- [ ] `tests/test_dynamodb.sh` - DynamoDB tests
+- [x] `src/services/dynamodb.rs` - DynamoDB operations
+- [x] `src/services/delivery.rs` - HTTP delivery
+- [x] `src/services/signature.rs` - HMAC generation
+- [x] `src/services/mod.rs` - Service exports
+- [x] `worker/tests/end_to_end_test.sh` - Contract integration helper
+- [x] `scripts/e2e_ingestion_worker.sh` - Full ingestion->worker e2e
+- [x] `tests/test_dynamodb.sh` - DynamoDB tests
 - [ ] `docs/runbook.md` - Operational guide
 - [ ] `docs/troubleshooting.md` - Common issues
 - [ ] `README.md` - Worker overview

@@ -1,0 +1,75 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Delivery Success vs Failure (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Worker", "webhook.delivery.success", "environment", "dev", "queue_name", "webhook_delivery_dev"],
+          [".", "webhook.delivery.failure", ".", ".", ".", "."]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Delivery Latency p95 (ms)",
+        "view": "timeSeries",
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "p95",
+        "metrics": [
+          ["HoorayRelay/Worker", "webhook.delivery.latency_ms", "environment", "dev", "queue_name", "webhook_delivery_dev"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Worker Queue Depth (Custom Metric)",
+        "view": "timeSeries",
+        "region": "us-west-2",
+        "period": 60,
+        "stat": "Maximum",
+        "metrics": [
+          ["HoorayRelay/Worker", "webhook.queue.depth", "environment", "dev", "queue_name", "webhook_delivery_dev"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "SQS Visible vs In Flight",
+        "view": "timeSeries",
+        "region": "us-west-2",
+        "period": 60,
+        "stat": "Average",
+        "metrics": [
+          ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "webhook_delivery_dev"],
+          [".", "ApproximateNumberOfMessagesNotVisible", ".", "."]
+        ]
+      }
+    }
+  ]
+}
