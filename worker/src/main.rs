@@ -238,8 +238,8 @@ impl Worker {
 
         match result {
             Ok(output) => {
-                if let Some(attributes) = output.attributes() {
-                    if let Some(raw_depth) =
+                if let Some(attributes) = output.attributes()
+                    && let Some(raw_depth) =
                         attributes.get(&sqs::types::QueueAttributeName::ApproximateNumberOfMessages)
                     {
                         match raw_depth.parse::<i64>() {
@@ -249,7 +249,6 @@ impl Worker {
                             }
                         }
                     }
-                }
             }
             Err(err) => warn!(error = %err, "failed to sample queue depth"),
         }
