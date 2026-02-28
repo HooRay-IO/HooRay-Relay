@@ -1,7 +1,9 @@
 pub mod model;
+pub mod observability;
 pub mod services;
 use aws_sdk_dynamodb::Client as DynamoDbClient;
 use aws_sdk_sqs as sqs;
+use observability::Observability;
 use services::{delivery::DeliveryService, dynamodb::DynamoDbService};
 use sqs::types::Message;
 use std::{env, time::Duration};
@@ -20,6 +22,7 @@ struct Worker {
     sqs_client: sqs::Client,
     queue_url: String,
     dynamodb_service: DynamoDbService,
+    observability: Observability,
 }
 
 impl Worker {
@@ -50,6 +53,7 @@ impl Worker {
         Ok(Worker {
             delivery_service: DeliveryService::new(),
             sqs_client: sqs::Client::new(&config),
+            observability: Observability::new(&queue_url),
             queue_url,
             dynamodb_service: DynamoDbService::new(
                 DynamoDbClient::new(&config),
@@ -71,6 +75,8 @@ impl Worker {
 
     async fn poll_and_process(&self) -> Result<(), WorkerError> {
         info!("polling SQS");
+        self.emit_queue_depth_metric().await;
+
         let response = self
             .sqs_client
             .receive_message()
@@ -96,6 +102,7 @@ impl Worker {
                 error!(error = %err, "failed to process message");
             }
         }
+        self.emit_queue_depth_metric().await;
 
         Ok(())
     }
@@ -139,6 +146,8 @@ impl Worker {
         }
 
         let (result, attempt) = self.delivery_service.deliver(&event, &config).await?;
+        self.observability
+            .emit_delivery_attempt(&event, &attempt, &result);
         self.dynamodb_service.record_attempt(attempt).await?;
         event.attempt_count += 1;
         self.dynamodb_service
@@ -216,6 +225,33 @@ impl Worker {
 
         info!("deleted SQS message");
         Ok(())
+    }
+
+    async fn emit_queue_depth_metric(&self) {
+        let result = self
+            .sqs_client
+            .get_queue_attributes()
+            .queue_url(&self.queue_url)
+            .attribute_names(sqs::types::QueueAttributeName::ApproximateNumberOfMessages)
+            .send()
+            .await;
+
+        match result {
+            Ok(output) => {
+                if let Some(attributes) = output.attributes()
+                    && let Some(raw_depth) =
+                        attributes.get(&sqs::types::QueueAttributeName::ApproximateNumberOfMessages)
+                {
+                    match raw_depth.parse::<i64>() {
+                        Ok(depth) => self.observability.emit_queue_depth(depth),
+                        Err(err) => {
+                            warn!(error = %err, value = %raw_depth, "failed to parse queue depth")
+                        }
+                    }
+                }
+            }
+            Err(err) => warn!(error = %err, "failed to sample queue depth"),
+        }
     }
 }
 #[tokio::main]
