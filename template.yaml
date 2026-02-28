@@ -260,6 +260,68 @@ Resources:
       TreatMissingData: notBreaching
 
   # -------------------------------------------------------------------------
+  # CloudWatch Alarms: Ingestion Lambda  (Engineer 1 — Day 6)
+  # -------------------------------------------------------------------------
+
+  # Fires when ≥1 Lambda-level error occurs in any 5-minute window.
+  # Lambda errors = unhandled panics / out-of-memory / timeout.
+  IngestionErrorRateAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hooray-relay-ingestion-errors-${Environment}"
+      AlarmDescription: "Ingestion Lambda reported errors — check CloudWatch Logs"
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref IngestionFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  # Fires when the custom SQS enqueue failure metric is ≥1 in any 5-minute window.
+  # This detects events persisted to DynamoDB but never enqueued — orphaned events.
+  IngestionEnqueueFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hooray-relay-ingestion-enqueue-failure-${Environment}"
+      AlarmDescription: "Ingestion Lambda failed to enqueue event on SQS — orphaned events possible"
+      Namespace: HoorayRelay/Ingestion
+      MetricName: webhook.enqueue.failure.count
+      Dimensions:
+        - Name: environment
+          Value: !Ref Environment
+        - Name: status_code
+          Value: "500"
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
+  # Fires when ingestion p95 latency exceeds 2 000 ms over a 5-minute window.
+  IngestionLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hooray-relay-ingestion-latency-${Environment}"
+      AlarmDescription: "Ingestion Lambda p95 latency > 2 000 ms — possible DynamoDB or SQS slowdown"
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref IngestionFunction
+      ExtendedStatistic: p95
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 2000
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+
+  # -------------------------------------------------------------------------
   # Lambda: Ingestion (Engineer 1)
   # Placeholder — binary will be provided by `cargo lambda build`
   # -------------------------------------------------------------------------

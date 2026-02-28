@@ -1,0 +1,158 @@
+{
+  "widgets": [
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Webhook Receive Rate (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.receive.count", "environment", "dev", "status_code", "202", { "label": "202 Accepted" }],
+          [".", ".", ".", ".", "status_code", "200", { "label": "200 Duplicate" }],
+          [".", ".", ".", ".", "status_code", "422", { "label": "422 Validation Error" }],
+          [".", ".", ".", ".", "status_code", "500", { "label": "500 Internal Error" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 0,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Receive Latency (ms) — p50 / p95 / p99",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.receive.latency_ms", "environment", "dev", "status_code", "202", { "stat": "p50",  "label": "p50" }],
+          [".", ".", ".", ".", ".", ".",                                                                      { "stat": "p95",  "label": "p95" }],
+          [".", ".", ".", ".", ".", ".",                                                                      { "stat": "p99",  "label": "p99" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Idempotency Hit Rate (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.idempotency.duplicate.count", "environment", "dev", "status_code", "200", { "label": "Duplicate requests detected" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "SQS Enqueue Failures (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.enqueue.failure.count", "environment", "dev", "status_code", "500", { "label": "Enqueue failures", "color": "#d62728" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Config API — Create & Get (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.config.create.count", "environment", "dev", "status_code", "201", { "label": "Config created (201)" }],
+          ["HoorayRelay/Ingestion", "webhook.config.get.count",    "environment", "dev", "status_code", "200", { "label": "Config fetched (200)" }],
+          ["HoorayRelay/Ingestion", "webhook.config.get.count",    "environment", "dev", "status_code", "404", { "label": "Config not found (404)", "color": "#ff7f0e" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Lambda — Ingestion Error Rate (5m)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["AWS/Lambda", "Errors",   "FunctionName", "IngestionFunction-dev", { "label": "Lambda errors",   "color": "#d62728" }],
+          ["AWS/Lambda", "Throttles","FunctionName", "IngestionFunction-dev", { "label": "Lambda throttles","color": "#ff7f0e" }],
+          ["AWS/Lambda", "Invocations","FunctionName","IngestionFunction-dev",{ "label": "Invocations",     "color": "#1f77b4" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 18,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Lambda — Ingestion Duration (ms)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "metrics": [
+          ["AWS/Lambda", "Duration", "FunctionName", "IngestionFunction-dev", { "stat": "p50",  "label": "p50" }],
+          [".",          ".",        ".",             ".",                      { "stat": "p95",  "label": "p95" }],
+          [".",          ".",        ".",             ".",                      { "stat": "p99",  "label": "p99" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 18,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "API Gateway — 4xx / 5xx Errors (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["AWS/ApiGateway", "4XXError", "ApiName", "hooray-dev", { "label": "4xx errors", "color": "#ff7f0e" }],
+          ["AWS/ApiGateway", "5XXError", "ApiName", "hooray-dev", { "label": "5xx errors", "color": "#d62728" }]
+        ]
+      }
+    }
+  ]
+}
