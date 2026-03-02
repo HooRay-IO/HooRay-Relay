@@ -20,7 +20,7 @@
 //! handler can stay pure and testable without touching global state.
 
 use std::sync::Arc;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use axum::Json;
 use axum::extract::State;
@@ -32,6 +32,7 @@ use crate::model::{
     IngestionError, ReceiveStatus, WebhookReceiveRequest, WebhookReceiveResponse,
     WebhookValidationError,
 };
+use crate::observability::Observability;
 use crate::services::dynamodb::AppConfig;
 use crate::services::idempotency::IdempotencyOutcome;
 use crate::services::{events, idempotency, queue};
@@ -50,6 +51,8 @@ pub struct AppState {
     pub sqs: aws_sdk_sqs::Client,
     /// Runtime configuration loaded from environment variables.
     pub config: AppConfig,
+    /// CloudWatch EMF metric emitter.
+    pub observability: Observability,
 }
 
 // ---------------------------------------------------------------------------
@@ -73,12 +76,23 @@ pub async fn receive_webhook(
     State(state): State<Arc<AppState>>,
     Json(req): Json<WebhookReceiveRequest>,
 ) -> Response {
+    // Start wall-clock timer for end-to-end latency metric.
+    let start = Instant::now();
+
     // ------------------------------------------------------------------
     // Step 1 — Validate the incoming request.
     // ------------------------------------------------------------------
     if let Err(e) = req.validate() {
         warn!(error = %e, "webhook request failed validation");
-        return validation_error_response(e);
+        let resp = validation_error_response(e);
+        state.observability.emit_receive(
+            &req.customer_id,
+            422,
+            start.elapsed().as_millis() as u64,
+            false,
+            false,
+        );
+        return resp;
     }
 
     // ------------------------------------------------------------------
@@ -99,7 +113,15 @@ pub async fn receive_webhook(
         Ok(outcome) => outcome,
         Err(e) => {
             error!(error = %e, "idempotency check failed");
-            return ingestion_error_response(e);
+            let resp = ingestion_error_response(e);
+            state.observability.emit_receive(
+                &req.customer_id,
+                500,
+                start.elapsed().as_millis() as u64,
+                false,
+                false,
+            );
+            return resp;
         }
     };
 
@@ -119,6 +141,13 @@ pub async fn receive_webhook(
             status: ReceiveStatus::Duplicate,
             created_at: unix_now_secs(),
         };
+        state.observability.emit_receive(
+            &req.customer_id,
+            200,
+            start.elapsed().as_millis() as u64,
+            true,
+            false,
+        );
         return (StatusCode::OK, Json(body)).into_response();
     }
 
@@ -128,7 +157,15 @@ pub async fn receive_webhook(
     let payload = match events::serialize_payload(&req.data) {
         Ok(p) => p,
         Err(e) => {
-            return ingestion_error_response(e);
+            let resp = ingestion_error_response(e);
+            state.observability.emit_receive(
+                &req.customer_id,
+                500,
+                start.elapsed().as_millis() as u64,
+                false,
+                false,
+            );
+            return resp;
         }
     };
 
@@ -141,7 +178,15 @@ pub async fn receive_webhook(
 
     if let Err(e) = events::create_event(&state.dynamo, &state.config.events_table, &event).await {
         error!(error = %e, event_id = %event_id, "failed to persist event to DynamoDB");
-        return ingestion_error_response(e);
+        let resp = ingestion_error_response(e);
+        state.observability.emit_receive(
+            &req.customer_id,
+            500,
+            start.elapsed().as_millis() as u64,
+            false,
+            false,
+        );
+        return resp;
     }
 
     // ------------------------------------------------------------------
@@ -165,7 +210,15 @@ pub async fn receive_webhook(
         // perform manual re-queueing or run a separate reconciliation job that
         // scans for persisted-but-not-enqueued events and enqueues them.
         error!(error = %e, event_id = %event_id, "failed to enqueue event on SQS");
-        return ingestion_error_response(e);
+        let resp = ingestion_error_response(e);
+        state.observability.emit_receive(
+            &req.customer_id,
+            500,
+            start.elapsed().as_millis() as u64,
+            false,
+            true, // enqueue_failed = true
+        );
+        return resp;
     }
 
     // ------------------------------------------------------------------
@@ -177,6 +230,11 @@ pub async fn receive_webhook(
         idempotency_key = %req.idempotency_key,
         "webhook event accepted and enqueued"
     );
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+    state
+        .observability
+        .emit_receive(&req.customer_id, 202, latency_ms, false, false);
 
     let body = WebhookReceiveResponse {
         event_id,

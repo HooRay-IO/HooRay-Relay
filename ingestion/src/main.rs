@@ -19,6 +19,7 @@
 
 pub mod handlers;
 pub mod model;
+pub mod observability;
 pub mod services;
 
 use std::sync::Arc;
@@ -33,6 +34,7 @@ use tracing_subscriber::fmt::format::FmtSpan;
 
 use handlers::config::{create_config, get_config};
 use handlers::webhook::{AppState, receive_webhook};
+use observability::Observability;
 use services::dynamodb::{AppConfig, build_dynamo_client};
 
 #[tokio::main]
@@ -76,6 +78,7 @@ async fn main() -> Result<(), lambda_http::Error> {
         dynamo,
         sqs,
         config,
+        observability: Observability::new(),
     });
 
     // ------------------------------------------------------------------

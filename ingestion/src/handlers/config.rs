@@ -102,6 +102,9 @@ pub async fn create_config(
                 url = %config.url,
                 "webhook config created"
             );
+            state
+                .observability
+                .emit_config_create(&req.customer_id, 201);
             (StatusCode::CREATED, Json(config.to_response())).into_response()
         }
         Err(e) => {
@@ -110,6 +113,9 @@ pub async fn create_config(
                 customer_id = %req.customer_id,
                 "failed to persist webhook config"
             );
+            state
+                .observability
+                .emit_config_create(&req.customer_id, 500);
             config_error_response(e)
         }
     }
@@ -137,6 +143,9 @@ pub async fn get_config(
     {
         Ok(config) => {
             info!(customer_id = %params.customer_id, "webhook config retrieved");
+            state
+                .observability
+                .emit_config_get(&params.customer_id, 200);
             (StatusCode::OK, Json(config.to_response())).into_response()
         }
         Err(e) => {
@@ -145,6 +154,13 @@ pub async fn get_config(
                 customer_id = %params.customer_id,
                 "failed to retrieve webhook config"
             );
+            let status_code = match &e {
+                IngestionError::ItemNotFound { .. } | IngestionError::ConfigNotFound(_) => 404,
+                _ => 500,
+            };
+            state
+                .observability
+                .emit_config_get(&params.customer_id, status_code);
             config_error_response(e)
         }
     }
