@@ -53,8 +53,8 @@ impl Observability {
     pub fn new() -> Self {
         let environment =
             env::var("ENVIRONMENT").unwrap_or_else(|_| DEFAULT_ENVIRONMENT.to_string());
-        let namespace = env::var("METRIC_NAMESPACE")
-            .unwrap_or_else(|_| DEFAULT_METRIC_NAMESPACE.to_string());
+        let namespace =
+            env::var("METRIC_NAMESPACE").unwrap_or_else(|_| DEFAULT_METRIC_NAMESPACE.to_string());
         Self {
             environment,
             namespace,
@@ -301,7 +301,10 @@ mod tests {
             &base_dims(),
         );
         let aws = &payload["_aws"];
-        assert!(aws["Timestamp"].is_number(), "_aws.Timestamp must be a number");
+        assert!(
+            aws["Timestamp"].is_number(),
+            "_aws.Timestamp must be a number"
+        );
         let metrics = &aws["CloudWatchMetrics"][0];
         assert_eq!(metrics["Namespace"], "HoorayRelay/Ingestion");
         assert_eq!(metrics["Metrics"][0]["Name"], "webhook.receive.count");
