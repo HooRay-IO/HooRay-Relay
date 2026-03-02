@@ -6,6 +6,7 @@ set -euo pipefail
 # 2) Verify worker delivery-attempt JSON logs contain required fields
 # 3) Verify custom CloudWatch metrics are visible
 # 4) Verify alarms exist (and optionally apply dashboard/alarms first)
+# 5) Optionally force alarm state transitions to validate trigger wiring
 #
 # Defaults:
 # - AWS_REGION=us-west-2
@@ -19,6 +20,7 @@ set -euo pipefail
 # - LOG_WAIT_SECS=180
 # - LOG_POLL_INTERVAL_SECS=10
 # - APPLY_MONITORING=false
+# - FORCE_ALARM_STATE_TEST=false
 
 require_cmd() {
   local cmd="$1"
@@ -46,6 +48,7 @@ METRIC_POLL_INTERVAL_SECS="${METRIC_POLL_INTERVAL_SECS:-10}"
 LOG_WAIT_SECS="${LOG_WAIT_SECS:-180}"
 LOG_POLL_INTERVAL_SECS="${LOG_POLL_INTERVAL_SECS:-10}"
 APPLY_MONITORING="${APPLY_MONITORING:-false}"
+FORCE_ALARM_STATE_TEST="${FORCE_ALARM_STATE_TEST:-false}"
 
 FAILURE_RATE_ALARM_NAME="${FAILURE_RATE_ALARM_NAME:-hooray-worker-failure-rate-${ENVIRONMENT}}"
 LATENCY_P95_ALARM_NAME="${LATENCY_P95_ALARM_NAME:-hooray-worker-latency-p95-${ENVIRONMENT}}"
@@ -118,11 +121,13 @@ if [[ -z "$SUCCESS_EVENT_ID" || -z "$FAILURE_EVENT_ID" ]]; then
   exit 1
 fi
 
-echo "[2/5] Verifying custom metric names are present in CloudWatch"
+echo "[2/6] Verifying custom metric names are present in CloudWatch"
 metric_names=(
+  "webhook.delivery.attempt"
   "webhook.delivery.success"
   "webhook.delivery.failure"
   "webhook.delivery.latency_ms"
+  "webhook.delivery.http_status_code"
   "webhook.queue.depth"
 )
 
@@ -139,18 +144,38 @@ for metric in "${metric_names[@]}"; do
     for ns in "${metric_namespaces[@]}"; do
       start_time="$(date -u -v-30M +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date -u -d '30 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
       end_time="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      datapoints="$(aws cloudwatch get-metric-statistics \
-        --namespace "$ns" \
-        --metric-name "$metric" \
-        --dimensions "Name=environment,Value=${ENVIRONMENT}" "Name=queue_name,Value=${QUEUE_NAME}" \
-        --start-time "$start_time" \
-        --end-time "$end_time" \
-        --period 60 \
-        --statistics Sum \
-        --region "$AWS_REGION" \
-        --profile "$AWS_PROFILE" \
-        --query "length(Datapoints)" \
-        --output text 2>/dev/null || true)"
+      if [[ "$metric" == "webhook.delivery.http_status_code" ]]; then
+        datapoints="$(aws cloudwatch get-metric-statistics \
+          --namespace "$ns" \
+          --metric-name "$metric" \
+          --dimensions \
+            "Name=environment,Value=${ENVIRONMENT}" \
+            "Name=queue_name,Value=${QUEUE_NAME}" \
+            "Name=status_code,Value=404" \
+          --start-time "$start_time" \
+          --end-time "$end_time" \
+          --period 60 \
+          --statistics Sum \
+          --region "$AWS_REGION" \
+          --profile "$AWS_PROFILE" \
+          --query "length(Datapoints)" \
+          --output text 2>/dev/null || true)"
+      else
+        datapoints="$(aws cloudwatch get-metric-statistics \
+          --namespace "$ns" \
+          --metric-name "$metric" \
+          --dimensions \
+            "Name=environment,Value=${ENVIRONMENT}" \
+            "Name=queue_name,Value=${QUEUE_NAME}" \
+          --start-time "$start_time" \
+          --end-time "$end_time" \
+          --period 60 \
+          --statistics Sum \
+          --region "$AWS_REGION" \
+          --profile "$AWS_PROFILE" \
+          --query "length(Datapoints)" \
+          --output text 2>/dev/null || true)"
+      fi
 
       if [[ "$datapoints" =~ ^[0-9]+$ ]] && (( datapoints > 0 )); then
         found="true"
@@ -186,7 +211,7 @@ for metric in "${metric_names[@]}"; do
   echo "  - metric visible: $metric (namespace=$matched_namespace)"
 done
 
-echo "[3/5] Verifying delivery-attempt log fields for both events"
+echo "[3/6] Verifying delivery-attempt log fields for both events"
 START_TIME_MS="$(( ( $(date +%s) - 1800 ) * 1000 ))"
 for event_id in "$SUCCESS_EVENT_ID" "$FAILURE_EVENT_ID"; do
   message=""
@@ -226,7 +251,7 @@ for event_id in "$SUCCESS_EVENT_ID" "$FAILURE_EVENT_ID"; do
   echo "  - log fields verified for event_id=$event_id"
 done
 
-echo "[4/5] Verifying alarm existence and current state"
+echo "[4/6] Verifying alarm existence and current state"
 alarms_json="$(aws cloudwatch describe-alarms \
   --alarm-names "$FAILURE_RATE_ALARM_NAME" "$LATENCY_P95_ALARM_NAME" "$DLQ_ALARM_NAME" \
   --region "$AWS_REGION" \
@@ -242,7 +267,40 @@ for alarm in "$FAILURE_RATE_ALARM_NAME" "$LATENCY_P95_ALARM_NAME" "$DLQ_ALARM_NA
   echo "  - alarm present: $alarm (state=$state)"
 done
 
-echo "[5/5] SUCCESS"
+if [[ "$FORCE_ALARM_STATE_TEST" == "true" ]]; then
+  echo "[5/6] Forcing alarm state transitions (ALARM -> OK)"
+  for alarm in "$FAILURE_RATE_ALARM_NAME" "$LATENCY_P95_ALARM_NAME" "$DLQ_ALARM_NAME"; do
+    aws cloudwatch set-alarm-state \
+      --alarm-name "$alarm" \
+      --state-value ALARM \
+      --state-reason "Day6 observability validation: forced ALARM state" \
+      --region "$AWS_REGION" \
+      --profile "$AWS_PROFILE" >/dev/null
+
+    alarm_state="$(aws cloudwatch describe-alarms \
+      --alarm-names "$alarm" \
+      --region "$AWS_REGION" \
+      --profile "$AWS_PROFILE" \
+      --query "MetricAlarms[0].StateValue" \
+      --output text)"
+    if [[ "$alarm_state" != "ALARM" ]]; then
+      echo "ERROR: failed to force ALARM state for $alarm (state=$alarm_state)" >&2
+      exit 1
+    fi
+
+    aws cloudwatch set-alarm-state \
+      --alarm-name "$alarm" \
+      --state-value OK \
+      --state-reason "Day6 observability validation: reset to OK" \
+      --region "$AWS_REGION" \
+      --profile "$AWS_PROFILE" >/dev/null
+    echo "  - alarm trigger path validated: $alarm"
+  done
+else
+  echo "[5/6] Skipping forced alarm transitions (set FORCE_ALARM_STATE_TEST=true to enable)"
+fi
+
+echo "[6/6] SUCCESS"
 echo "SUCCESS_EVENT_ID=$SUCCESS_EVENT_ID"
 echo "FAILURE_EVENT_ID=$FAILURE_EVENT_ID"
 echo "QUEUE_NAME=$QUEUE_NAME"

@@ -27,3 +27,11 @@ aws cloudwatch put-metric-alarm \
 ```
 
 `DLQDepthAlarm` is provisioned via `template.yaml` and should remain enabled.
+
+## Validate Day 6 End-to-End
+
+```bash
+FORCE_ALARM_STATE_TEST=true ./scripts/e2e_day6_observability.sh
+```
+
+This validates metric visibility, delivery-attempt log fields, alarm existence, and forced alarm transitions.

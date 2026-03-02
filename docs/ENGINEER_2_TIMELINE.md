@@ -238,12 +238,12 @@
   - High failure rate (>10%)
   - High latency (p95 >5s)
   - DLQ messages present
-- [ ] Test alarms trigger correctly
+- [x] Test alarms trigger correctly
 
 **Deliverables:**
 - [x] Metrics emitting properly
 - [x] Dashboard operational
-- Alarms configured and tested
+- [x] Alarms configured and tested
 
 **Commit:** `feat: add CloudWatch monitoring for delivery worker`
 
