@@ -232,13 +232,9 @@ pub async fn receive_webhook(
     );
 
     let latency_ms = start.elapsed().as_millis() as u64;
-    state.observability.emit_receive(
-        &req.customer_id,
-        202,
-        latency_ms,
-        false,
-        false,
-    );
+    state
+        .observability
+        .emit_receive(&req.customer_id, 202, latency_ms, false, false);
 
     let body = WebhookReceiveResponse {
         event_id,
