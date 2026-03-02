@@ -147,30 +147,64 @@ impl Observability {
 
     /// Emit metrics for a `POST /webhooks/configs` call.
     ///
-    /// Emits `webhook.config.create.count` with `customer_id` and `status_code`
-    /// dimensions.
+    /// Emits `webhook.config.create.count` both with detailed `customer_id`
+    /// dimension and aggregated without it (only `environment` + `status_code`),
+    /// matching the webhook receive metrics pattern and dashboard queries.
     pub fn emit_config_create(&self, customer_id: &str, status_code: u16) {
         let status_str = status_code.to_string();
-        let dims = vec![
+        let detailed_dims = vec![
             ("environment".to_string(), self.environment.clone()),
             ("customer_id".to_string(), customer_id.to_string()),
+            ("status_code".to_string(), status_str.clone()),
+        ];
+        let aggregate_dims = vec![
+            ("environment".to_string(), self.environment.clone()),
             ("status_code".to_string(), status_str),
         ];
-        self.emit_metric("webhook.config.create.count", "Count", 1.0, &dims);
+
+        self.emit_metric(
+            "webhook.config.create.count",
+            "Count",
+            1.0,
+            &detailed_dims,
+        );
+        self.emit_metric(
+            "webhook.config.create.count",
+            "Count",
+            1.0,
+            &aggregate_dims,
+        );
     }
 
     /// Emit metrics for a `GET /webhooks/configs` call.
     ///
-    /// Emits `webhook.config.get.count` with `customer_id` and `status_code`
-    /// dimensions.
+    /// Emits `webhook.config.get.count` both with detailed `customer_id`
+    /// dimension and aggregated without it (only `environment` + `status_code`),
+    /// matching the webhook receive metrics pattern and dashboard queries.
     pub fn emit_config_get(&self, customer_id: &str, status_code: u16) {
         let status_str = status_code.to_string();
-        let dims = vec![
+        let detailed_dims = vec![
             ("environment".to_string(), self.environment.clone()),
             ("customer_id".to_string(), customer_id.to_string()),
+            ("status_code".to_string(), status_str.clone()),
+        ];
+        let aggregate_dims = vec![
+            ("environment".to_string(), self.environment.clone()),
             ("status_code".to_string(), status_str),
         ];
-        self.emit_metric("webhook.config.get.count", "Count", 1.0, &dims);
+
+        self.emit_metric(
+            "webhook.config.get.count",
+            "Count",
+            1.0,
+            &detailed_dims,
+        );
+        self.emit_metric(
+            "webhook.config.get.count",
+            "Count",
+            1.0,
+            &aggregate_dims,
+        );
     }
 
     // -----------------------------------------------------------------------
