@@ -1,8 +1,8 @@
-# Ingestion Service — Engineer 1 (Days 1–4)
+# Ingestion Service — Engineer 1 (Days 1–6)
 
 > **Sprint context:** Engineer 1 owns the webhook ingestion pipeline; Engineer 2
 > owns the delivery worker (`../worker/`). This document is the living engineering
-> log for all four days of ingestion work — what was built, the thinking behind
+> log for all six days of ingestion work — what was built, the thinking behind
 > every design decision, the bugs encountered, and how they were solved.
 
 ---
@@ -21,6 +21,7 @@
 10. [Bugs Encountered & Solutions](#10-bugs-encountered--solutions)
 11. [Running the Tests](#11-running-the-tests)
 12. [Roadmap — Week 2](#12-roadmap--week-2)
+13. [Day 6 — CloudWatch Observability](#13-day-6--cloudwatch-observability)
 
 ---
 
@@ -39,8 +40,11 @@
 | 4 | Lambda entry point (router + cold-start) | `src/main.rs` | — |
 | 5 | Live integration test script (10 cases) | `tests/integration_test.sh` | — |
 | 5 | Engineer 2 handoff document | `docs/handoff-engineer2.md` | — |
+| 6 | CloudWatch EMF observability module | `src/observability.rs` | 6 |
+| 6 | CloudWatch dashboard (8 widgets) | `monitoring/ingestion-dashboard.json` | — |
+| 6 | CloudWatch alarms + Lambda IAM policy | `template.yaml` | — |
 
-**Total: 69 ingestion tests — 0 failures, 0 warnings.**
+**Total: 75 ingestion tests — 0 failures, 0 warnings.**
 
 ---
 
@@ -589,11 +593,11 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 | Day | Topic | Goal |
 |---|---|---|
-| 6 | CloudWatch dashboards | Webhook receive rate, idempotency hit %, error rates, p95 latency |
-| 7 | API documentation | OpenAPI spec, customer onboarding guide, Postman collection |
-| 8 | CI/CD pipeline | GitHub Actions: test → fmt → clippy → `sam deploy` to staging on merge |
-| 9 | Load testing | k6 at 500 req/sec, < 100ms p95, < 0.1% error rate |
-| 10 | Final polish | README, demo script, tag v1.0.0 |
+| 6 | CloudWatch dashboards | Webhook receive rate, idempotency hit %, error rates, p95 latency | ✅ |
+| 7 | API documentation | OpenAPI spec, customer onboarding guide, Postman collection | |
+| 8 | CI/CD pipeline | GitHub Actions: test → fmt → clippy → `sam deploy` to staging on merge | |
+| 9 | Load testing | k6 at 500 req/sec, < 100ms p95, < 0.1% error rate | |
+| 10 | Final polish | README, demo script, tag v1.0.0 | |
 
 ### Known technical debt
 
@@ -604,3 +608,142 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 | `GET /webhooks/configs` authentication | Medium | Currently anyone can read any customer's config by guessing `customer_id` |
 | `duplicate` response `created_at` returns "now" not original timestamp | Low | Would require fetching full `IdempotencyRecord`; scoped for Week 2 |
 | Integration tests run against live stack only | Medium | No local DynamoDB Local / LocalStack setup yet |
+
+---
+
+## 13. Day 6 — CloudWatch Observability
+
+### Goal
+
+Make the ingestion pipeline fully observable without deploying a CloudWatch agent.
+All metrics are emitted using **CloudWatch Embedded Metric Format (EMF)** — structured
+JSON log lines that CloudWatch Logs automatically extracts into CloudWatch Metrics.
+
+### New file: `src/observability.rs`
+
+```
+ingestion/src/
+└── observability.rs   ← Observability struct + EMF builder + 6 unit tests
+```
+
+The `Observability` struct is constructed **once at Lambda cold-start** (reads two env
+vars, allocates two strings) and stored in `AppState` alongside the AWS clients:
+
+```rust
+pub struct Observability {
+    environment: String,   // ENVIRONMENT env-var (default: "dev")
+    namespace: String,     // METRIC_NAMESPACE env-var (default: "HoorayRelay/Ingestion")
+}
+```
+
+### Emitted metrics
+
+| Metric name | Unit | Emitted when |
+|---|---|---|
+| `webhook.receive.count` | Count | Every `POST /webhooks/receive` call |
+| `webhook.receive.latency_ms` | Milliseconds | Every `POST /webhooks/receive` call |
+| `webhook.idempotency.duplicate.count` | Count | Idempotency key already seen |
+| `webhook.enqueue.failure.count` | Count | SQS `enqueue_event` returns `Err` |
+| `webhook.config.create.count` | Count | Every `POST /webhooks/configs` call |
+| `webhook.config.get.count` | Count | Every `GET /webhooks/configs` call |
+
+### Dimensions
+
+Every metric is emitted at **two granularities**:
+
+| Granularity | Dimensions | Use-case |
+|---|---|---|
+| Detailed | `environment`, `customer_id`, `status_code` | Per-customer debugging |
+| Aggregate | `environment`, `status_code` | Fleet-wide dashboards & alarms |
+
+### EMF format
+
+Each metric is a single `println!` of a JSON log line, e.g.:
+
+```json
+{
+  "environment": "dev",
+  "customer_id": "cust_xyz",
+  "status_code": "202",
+  "webhook.receive.count": 1.0,
+  "_aws": {
+    "Timestamp": 1740700946000,
+    "CloudWatchMetrics": [{
+      "Namespace": "HoorayRelay/Ingestion",
+      "Dimensions": [["environment", "customer_id", "status_code"]],
+      "Metrics": [{ "Name": "webhook.receive.count", "Unit": "Count" }]
+    }]
+  }
+}
+```
+
+No SDK calls, no extra IAM on the hot path — CloudWatch Logs extracts the metrics
+automatically. The only IAM addition is `cloudwatch:PutMetricData` added to
+`template.yaml` for alarm backfill scenarios.
+
+### CloudWatch dashboard: `monitoring/ingestion-dashboard.json`
+
+8 widgets at `us-west-2`, namespace `HoorayRelay/Ingestion`:
+
+| # | Widget title | Metric(s) |
+|---|---|---|
+| 1 | Webhook Receive Rate (5m Sum) | `webhook.receive.count` by `status_code` |
+| 2 | Receive Latency (ms) — p50/p95/p99 | `webhook.receive.latency_ms` |
+| 3 | Idempotency Hit Rate (5m Sum) | `webhook.idempotency.duplicate.count` |
+| 4 | SQS Enqueue Failures (5m Sum) | `webhook.enqueue.failure.count` |
+| 5 | Config API — Create & Get (5m Sum) | `webhook.config.create.count`, `webhook.config.get.count` |
+| 6 | Lambda Error Rate (5m) | `AWS/Lambda` Errors + Throttles + Invocations |
+| 7 | Lambda Duration (ms) — p50/p95/p99 | `AWS/Lambda` Duration |
+| 8 | API Gateway 4xx / 5xx (5m Sum) | `AWS/ApiGateway` 4XXError + 5XXError |
+
+**Deploy the dashboard:**
+
+```bash
+aws cloudwatch put-dashboard \
+  --dashboard-name hooray-relay-ingestion-dev \
+  --dashboard-body file://monitoring/ingestion-dashboard.json \
+  --region us-west-2 \
+  --profile hooray-dev
+```
+
+### Unit tests
+
+6 tests in `src/observability.rs` — run alongside the rest of the suite:
+
+```bash
+cargo test -p ingestion observability
+```
+
+| Test | What it asserts |
+|---|---|
+| `emf_payload_contains_metric_value` | Metric value present at root level |
+| `emf_payload_contains_all_dimensions_at_root` | All dimension k/v pairs flattened to root |
+| `emf_payload_has_aws_envelope` | `_aws.Timestamp`, `Namespace`, `Metrics[].Name/Unit` present |
+| `emf_payload_dimension_keys_in_envelope` | `_aws.CloudWatchMetrics[].Dimensions` lists all keys |
+| `emf_payload_latency_value` | Millisecond value round-trips correctly |
+| `observability_new_uses_env_default` | `Observability::new()` never panics without env vars |
+
+### Handler integration
+
+Both handlers call `Observability` at the **very end** of the request, after the
+response status code is known:
+
+```rust
+// webhook.rs — POST /webhooks/receive
+state.observability.emit_receive(
+    &req.customer_id,
+    status_code,
+    start.elapsed().as_millis() as u64,
+    is_duplicate,
+    enqueue_failed,
+);
+
+// config.rs — POST /webhooks/configs
+state.observability.emit_config_create(&req.customer_id, status_code);
+
+// config.rs — GET /webhooks/configs
+state.observability.emit_config_get(&customer_id, status_code);
+```
+
+`start` is a `std::time::Instant` captured at handler entry — no async overhead,
+no extra allocations on the hot path.

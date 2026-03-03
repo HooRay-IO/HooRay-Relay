@@ -1,0 +1,480 @@
+openapi: "3.1.0"
+
+info:
+  title: HooRay Relay — Ingestion API
+  version: "1.0.0"
+  description: |
+    The HooRay Relay ingestion API receives webhook events from your systems,
+    ensures idempotent storage, and queues them for reliable delivery to your
+    configured customer endpoints.
+
+    ## How it works
+
+    1. You POST an event to `/webhooks/receive` with a unique `idempotency_key`.
+    2. HooRay stores the event in DynamoDB and enqueues it for delivery.
+    3. The delivery worker picks it up, signs it with your HMAC secret, and
+       POSTs it to your registered endpoint.
+    4. On failure the worker retries up to `max_retries` times with exponential
+       back-off.
+
+    ## Authentication
+
+    All requests must include your API key in the `X-API-Key` header.
+
+  contact:
+    name: HooRay Engineering
+    email: engineering@hooray.io
+
+servers:
+  - url: https://{api_id}.execute-api.us-west-2.amazonaws.com/{stage}
+    description: AWS API Gateway (replace with your deployed endpoint)
+    variables:
+      api_id:
+        default: "your-api-id"
+        description: API Gateway REST API ID
+      stage:
+        default: dev
+        enum: [dev, staging, prod]
+
+# ---------------------------------------------------------------------------
+# Security
+# ---------------------------------------------------------------------------
+
+security:
+  - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        API key issued per customer. Include it on every request.
+        Example: `X-API-Key: apk_1a2b3c4d5e6f`
+
+  # -------------------------------------------------------------------------
+  # Reusable schemas
+  # -------------------------------------------------------------------------
+  schemas:
+
+    # --- Request bodies ---
+
+    WebhookReceiveRequest:
+      type: object
+      required:
+        - idempotency_key
+        - customer_id
+        - data
+      properties:
+        idempotency_key:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: |
+            Caller-supplied unique token that prevents the same logical event
+            from being stored and delivered more than once within the 24-hour
+            idempotency window.
+
+            Use a value that is naturally unique for the event in your system
+            (e.g. your database row ID, a UUID you generate at send time).
+          example: "req_01HX5Y3Z9ABCDEF"
+        customer_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: |
+            Identifies the customer whose delivery configuration should be used.
+            Must match a config previously registered via `POST /webhooks/configs`.
+          example: "cust_xyz123"
+        data:
+          type: object
+          description: |
+            Arbitrary JSON payload forwarded verbatim to the customer endpoint.
+            The ingestion layer never inspects this object — it is stored and
+            delivered as-is. Maximum serialised size: 400 KB.
+          example:
+            order_id: "ord_12345"
+            amount: 99.99
+            customer_email: "user@example.com"
+
+    CreateConfigRequest:
+      type: object
+      required:
+        - customer_id
+        - url
+      properties:
+        customer_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          description: Unique identifier for the customer.
+          example: "cust_xyz123"
+        url:
+          type: string
+          format: uri
+          description: |
+            HTTPS endpoint that HooRay will POST webhook events to.
+            Must be publicly reachable by the delivery worker.
+          example: "https://customer.example.com/webhooks"
+        secret:
+          type: string
+          description: |
+            Optional HMAC signing secret. If omitted, a `whsec_`-prefixed
+            32-character alphanumeric secret is generated automatically.
+
+            Store this value securely — it is used to verify the
+            `X-Webhook-Signature` header on incoming deliveries.
+          example: "whsec_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+
+    # --- Response bodies ---
+
+    WebhookReceiveResponse:
+      type: object
+      required:
+        - event_id
+        - status
+        - created_at
+      properties:
+        event_id:
+          type: string
+          description: |
+            Unique identifier assigned by HooRay to this event.
+            Use this to look up delivery status or correlate logs.
+          example: "evt_1a2b3c4d"
+        status:
+          type: string
+          enum: [accepted, duplicate]
+          description: |
+            `accepted` — event was new and has been queued for delivery.
+            `duplicate` — an event with this `idempotency_key` was already
+            received; the original `event_id` is returned.
+          example: "accepted"
+        created_at:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds) when the event was first created.
+          example: 1707840000
+
+    WebhookConfigResponse:
+      type: object
+      required:
+        - customer_id
+        - url
+        - secret
+        - max_retries
+        - active
+        - created_at
+        - updated_at
+      properties:
+        customer_id:
+          type: string
+          example: "cust_xyz123"
+        url:
+          type: string
+          format: uri
+          example: "https://customer.example.com/webhooks"
+        secret:
+          type: string
+          description: |
+            HMAC signing secret. Treat this as a credential — do not log it
+            or expose it to client-side code.
+          example: "whsec_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+        max_retries:
+          type: integer
+          description: Maximum number of delivery attempts before marking the event failed.
+          example: 3
+        active:
+          type: boolean
+          description: Whether this configuration is currently active for deliveries.
+          example: true
+        created_at:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds) when the config was first created.
+          example: 1707840000
+        updated_at:
+          type: integer
+          format: int64
+          description: Unix timestamp (seconds) when the config was last updated.
+          example: 1707840000
+
+    # --- Error bodies ---
+
+    ErrorResponse:
+      type: object
+      required:
+        - error
+        - message
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code.
+          example: "invalid_request"
+        message:
+          type: string
+          description: Human-readable explanation.
+          example: "Missing required field: idempotency_key"
+
+  # -------------------------------------------------------------------------
+  # Reusable responses
+  # -------------------------------------------------------------------------
+  responses:
+
+    400BadRequest:
+      description: Bad request — missing or invalid fields.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          examples:
+            missing_field:
+              summary: Missing required field
+              value:
+                error: "invalid_request"
+                message: "Missing required field: idempotency_key"
+            key_too_long:
+              summary: idempotency_key exceeds 256 characters
+              value:
+                error: "invalid_request"
+                message: "idempotency_key length 300 exceeds maximum of 256 characters"
+            payload_too_large:
+              summary: data payload exceeds 400 KB
+              value:
+                error: "invalid_request"
+                message: "data payload too large: 450000 bytes (max 409600 bytes)"
+
+    404NotFound:
+      description: Resource not found.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "not_found"
+            message: "No config found for customer_id: cust_xyz123"
+
+    422UnprocessableEntity:
+      description: Request body failed validation.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "unprocessable_entity"
+            message: "customer_id must not be empty"
+
+    500InternalServerError:
+      description: Internal server error — transient AWS service failure.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+          example:
+            error: "internal_error"
+            message: "Failed to write event to DynamoDB"
+
+# ---------------------------------------------------------------------------
+# Paths
+# ---------------------------------------------------------------------------
+
+paths:
+
+  # --------------------------------------------------------------------------
+  # POST /webhooks/receive
+  # --------------------------------------------------------------------------
+  /webhooks/receive:
+    post:
+      operationId: receiveWebhook
+      summary: Receive a webhook event
+      description: |
+        Ingests a webhook event, stores it durably, and queues it for delivery
+        to the customer's registered endpoint.
+
+        ### Idempotency
+
+        Supply a unique `idempotency_key` with each request. If you retry a
+        failed request with the same key within 24 hours, the API returns
+        `200 OK` with `"status": "duplicate"` and the original `event_id`
+        — the event will **not** be delivered twice.
+
+        ### Status codes at a glance
+
+        | Status | Meaning |
+        |--------|---------|
+        | 202    | New event accepted and queued |
+        | 200    | Duplicate — already received, no re-delivery |
+        | 422    | Validation error in request body |
+        | 500    | Transient storage or queue failure — safe to retry |
+
+      tags:
+        - Events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WebhookReceiveRequest"
+            examples:
+              order_created:
+                summary: Order created event
+                value:
+                  idempotency_key: "req_01HX5Y3Z9ABCDEF"
+                  customer_id: "cust_xyz123"
+                  data:
+                    order_id: "ord_12345"
+                    amount: 99.99
+                    customer_email: "user@example.com"
+              user_signup:
+                summary: User signup event
+                value:
+                  idempotency_key: "req_signup_user_987"
+                  customer_id: "cust_abc456"
+                  data:
+                    user_id: "usr_987"
+                    email: "new@example.com"
+                    plan: "pro"
+      responses:
+        "202":
+          description: Event accepted and queued for delivery.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookReceiveResponse"
+              example:
+                event_id: "evt_1a2b3c4d"
+                status: "accepted"
+                created_at: 1707840000
+        "200":
+          description: |
+            Duplicate event — an event with this `idempotency_key` was already
+            received. The original `event_id` is returned; no re-delivery occurs.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookReceiveResponse"
+              example:
+                event_id: "evt_1a2b3c4d"
+                status: "duplicate"
+                created_at: 1707840000
+        "422":
+          $ref: "#/components/responses/422UnprocessableEntity"
+        "500":
+          $ref: "#/components/responses/500InternalServerError"
+
+  # --------------------------------------------------------------------------
+  # POST /webhooks/configs
+  # --------------------------------------------------------------------------
+  /webhooks/configs:
+    post:
+      operationId: createWebhookConfig
+      summary: Register a customer webhook configuration
+      description: |
+        Registers or overwrites the delivery configuration for a customer.
+        If a config already exists for the given `customer_id` it is replaced
+        (last-write-wins), allowing secret rotation without downtime.
+
+        If `secret` is omitted, a secure `whsec_`-prefixed secret is generated
+        automatically. Store the returned secret — it cannot be retrieved again
+        in plaintext after this call.
+
+        ### Status codes at a glance
+
+        | Status | Meaning |
+        |--------|---------|
+        | 201    | Config created or updated successfully |
+        | 500    | Transient DynamoDB failure — safe to retry |
+
+      tags:
+        - Configuration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateConfigRequest"
+            examples:
+              auto_secret:
+                summary: Let HooRay generate the signing secret
+                value:
+                  customer_id: "cust_xyz123"
+                  url: "https://customer.example.com/webhooks"
+              bring_your_own_secret:
+                summary: Supply your own signing secret
+                value:
+                  customer_id: "cust_xyz123"
+                  url: "https://customer.example.com/webhooks"
+                  secret: "whsec_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+      responses:
+        "201":
+          description: Config created or updated successfully.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookConfigResponse"
+              example:
+                customer_id: "cust_xyz123"
+                url: "https://customer.example.com/webhooks"
+                secret: "whsec_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+                max_retries: 3
+                active: true
+                created_at: 1707840000
+                updated_at: 1707840000
+        "500":
+          $ref: "#/components/responses/500InternalServerError"
+
+    get:
+      operationId: getWebhookConfig
+      summary: Retrieve a customer webhook configuration
+      description: |
+        Returns the delivery configuration for the given `customer_id`.
+
+        ### Status codes at a glance
+
+        | Status | Meaning |
+        |--------|---------|
+        | 200    | Config found and returned |
+        | 404    | No config exists for this `customer_id` |
+        | 500    | Transient DynamoDB failure — safe to retry |
+
+      tags:
+        - Configuration
+      parameters:
+        - name: customer_id
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 128
+          description: The customer ID whose config should be retrieved.
+          example: "cust_xyz123"
+      responses:
+        "200":
+          description: Config found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WebhookConfigResponse"
+              example:
+                customer_id: "cust_xyz123"
+                url: "https://customer.example.com/webhooks"
+                secret: "whsec_a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6"
+                max_retries: 3
+                active: true
+                created_at: 1707840000
+                updated_at: 1707840000
+        "404":
+          $ref: "#/components/responses/404NotFound"
+        "500":
+          $ref: "#/components/responses/500InternalServerError"
+
+# ---------------------------------------------------------------------------
+# Tags (for Swagger UI grouping)
+# ---------------------------------------------------------------------------
+
+tags:
+  - name: Events
+    description: Ingest webhook events for delivery.
+  - name: Configuration
+    description: Manage customer delivery endpoint configurations.
