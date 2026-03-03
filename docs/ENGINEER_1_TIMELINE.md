@@ -193,14 +193,14 @@
 **Goal:** Create comprehensive API docs
 
 **Tasks:**
-- [ ] Write OpenAPI/Swagger spec in `docs/api-spec.yaml`
-- [ ] Document all endpoints with:
+- [x] Write OpenAPI/Swagger spec in `docs/api-spec.yaml`
+- [x] Document all endpoints with:
   - Request/response examples
   - Error codes
   - Authentication requirements
-- [ ] Create `docs/customer-guide.md` for API users
+- [x] Create `docs/customer-guide.md` for API users
 - [ ] Create Postman collection for testing
-- [ ] Add example code snippets (curl, Python, Node.js)
+- [x] Add example code snippets (curl, Python, Node.js)
 
 **Deliverables:**
 - OpenAPI spec complete

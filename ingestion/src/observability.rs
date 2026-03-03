@@ -53,8 +53,8 @@ impl Observability {
     pub fn new() -> Self {
         let environment =
             env::var("ENVIRONMENT").unwrap_or_else(|_| DEFAULT_ENVIRONMENT.to_string());
-        let namespace = env::var("METRIC_NAMESPACE")
-            .unwrap_or_else(|_| DEFAULT_METRIC_NAMESPACE.to_string());
+        let namespace =
+            env::var("METRIC_NAMESPACE").unwrap_or_else(|_| DEFAULT_METRIC_NAMESPACE.to_string());
         Self {
             environment,
             namespace,
@@ -151,12 +151,17 @@ impl Observability {
     /// dimensions.
     pub fn emit_config_create(&self, customer_id: &str, status_code: u16) {
         let status_str = status_code.to_string();
-        let dims = vec![
+        let detailed_dims = vec![
             ("environment".to_string(), self.environment.clone()),
             ("customer_id".to_string(), customer_id.to_string()),
+            ("status_code".to_string(), status_str.clone()),
+        ];
+        let aggregate_dims = vec![
+            ("environment".to_string(), self.environment.clone()),
             ("status_code".to_string(), status_str),
         ];
-        self.emit_metric("webhook.config.create.count", "Count", 1.0, &dims);
+        self.emit_metric("webhook.config.create.count", "Count", 1.0, &detailed_dims);
+        self.emit_metric("webhook.config.create.count", "Count", 1.0, &aggregate_dims);
     }
 
     /// Emit metrics for a `GET /webhooks/configs` call.
@@ -165,12 +170,17 @@ impl Observability {
     /// dimensions.
     pub fn emit_config_get(&self, customer_id: &str, status_code: u16) {
         let status_str = status_code.to_string();
-        let dims = vec![
+        let detailed_dims = vec![
             ("environment".to_string(), self.environment.clone()),
             ("customer_id".to_string(), customer_id.to_string()),
+            ("status_code".to_string(), status_str.clone()),
+        ];
+        let aggregate_dims = vec![
+            ("environment".to_string(), self.environment.clone()),
             ("status_code".to_string(), status_str),
         ];
-        self.emit_metric("webhook.config.get.count", "Count", 1.0, &dims);
+        self.emit_metric("webhook.config.get.count", "Count", 1.0, &detailed_dims);
+        self.emit_metric("webhook.config.get.count", "Count", 1.0, &aggregate_dims);
     }
 
     // -----------------------------------------------------------------------
@@ -301,7 +311,10 @@ mod tests {
             &base_dims(),
         );
         let aws = &payload["_aws"];
-        assert!(aws["Timestamp"].is_number(), "_aws.Timestamp must be a number");
+        assert!(
+            aws["Timestamp"].is_number(),
+            "_aws.Timestamp must be a number"
+        );
         let metrics = &aws["CloudWatchMetrics"][0];
         assert_eq!(metrics["Namespace"], "HoorayRelay/Ingestion");
         assert_eq!(metrics["Metrics"][0]["Name"], "webhook.receive.count");
