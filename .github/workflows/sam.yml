@@ -39,7 +39,7 @@ jobs:
         uses: aws-actions/setup-sam@v2
 
       - name: Install Cargo Lambda
-        run: cargo install cargo-lambda --locked
+        run: cargo install cargo-lambda --version 1.3.0 --locked
 
       - name: Verify Cargo Lambda
         run: cargo lambda --version

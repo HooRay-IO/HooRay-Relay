@@ -38,6 +38,18 @@ DOCKER_PLATFORM="${DOCKER_PLATFORM:-linux/arm64}"
 AWS_PROFILE="${AWS_PROFILE:-$(toml_value profile)}"
 AWS_REGION="${AWS_REGION:-$(toml_value region)}"
 AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-$AWS_REGION}"
+
+if [[ -z "$AWS_PROFILE" ]]; then
+  echo "ERROR: AWS_PROFILE is not set and 'profile' could not be read from samconfig.local.toml." >&2
+  echo "Set AWS_PROFILE or add a 'profile = \"...\"' entry to samconfig.local.toml." >&2
+  exit 1
+fi
+
+if [[ -z "$AWS_REGION" ]]; then
+  echo "ERROR: AWS_REGION is not set and 'region' could not be read from samconfig.local.toml." >&2
+  echo "Set AWS_REGION or add a 'region = \"...\"' entry to samconfig.local.toml." >&2
+  exit 1
+fi
 export AWS_PROFILE AWS_REGION AWS_DEFAULT_REGION
 
 if [[ "$PUSH_WORKER_IMAGE" == "true" ]]; then
