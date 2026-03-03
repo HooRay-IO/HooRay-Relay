@@ -3,31 +3,41 @@ export AWS_REGION="us-west-2"
 export AWS_DEFAULT_REGION="$AWS_REGION"
 export STACK_NAME="your-stack-name"
 export SKIP_DELIVERY=true
+export ECR_REPO="hooray-relay-worker-dev"
 
 # Resolve core values from CloudFormation outputs.
 export EVENTS_TABLE=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='EventsTableName'].OutputValue" \
   --output text)
 export CONFIGS_TABLE=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='ConfigsTableName'].OutputValue" \
   --output text)
 export QUEUE_URL=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='QueueUrl'].OutputValue" \
   --output text)
 
 # Optional but useful outputs/resources.
 export DLQ_URL=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='DLQUrl'].OutputValue" \
   --output text)
 export INGESTION_API_URL=$(aws cloudformation describe-stacks \
-  --stack-name "$STACK_NAME" --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='IngestionApiUrl'].OutputValue" \
   --output text)
 
 # Backward-compatible aliases for older scripts
 export WEBHOOK_EVENTS_TABLE="$EVENTS_TABLE"
 export WEBHOOK_CONFIGS_TABLE="$CONFIGS_TABLE"
+
+# Worker image URIs
+export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --profile "$AWS_PROFILE" --query "Account" --output text)
+export ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+export IMAGE_TAG="$(git rev-parse --short HEAD 2>/dev/null || echo "latest")"
+export SHA_IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}"
+export DEV_LATEST_IMAGE_URI="${ECR_REGISTRY}/${ECR_REPO}:dev-latest"
+export IMAGE_URI="$DEV_LATEST_IMAGE_URI"
+export WORKER_IMAGE_URI="$DEV_LATEST_IMAGE_URI"
