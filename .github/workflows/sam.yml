@@ -39,9 +39,10 @@ jobs:
         uses: aws-actions/setup-sam@v2
 
       - name: Install Cargo Lambda
-        uses: moonrepo/setup-rust@v1
-        with:
-          bins: cargo-lambda
+        run: cargo install cargo-lambda --locked
+
+      - name: Verify Cargo Lambda
+        run: cargo lambda --version
 
       - name: Install Zig
         uses: mlugg/setup-zig@v1
