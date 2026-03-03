@@ -91,6 +91,7 @@ pub async fn receive_webhook(
             start.elapsed().as_millis() as u64,
             false,
             false,
+            false,
         );
         return resp;
     }
@@ -120,6 +121,7 @@ pub async fn receive_webhook(
                 start.elapsed().as_millis() as u64,
                 false,
                 false,
+                false,
             );
             return resp;
         }
@@ -147,6 +149,7 @@ pub async fn receive_webhook(
             start.elapsed().as_millis() as u64,
             true,
             false,
+            false,
         );
         return (StatusCode::OK, Json(body)).into_response();
     }
@@ -163,6 +166,7 @@ pub async fn receive_webhook(
                 500,
                 start.elapsed().as_millis() as u64,
                 false,
+                true,
                 false,
             );
             return resp;
@@ -184,6 +188,7 @@ pub async fn receive_webhook(
             500,
             start.elapsed().as_millis() as u64,
             false,
+            true,
             false,
         );
         return resp;
@@ -216,6 +221,7 @@ pub async fn receive_webhook(
             500,
             start.elapsed().as_millis() as u64,
             false,
+            false,
             true, // enqueue_failed = true
         );
         return resp;
@@ -234,7 +240,7 @@ pub async fn receive_webhook(
     let latency_ms = start.elapsed().as_millis() as u64;
     state
         .observability
-        .emit_receive(&req.customer_id, 202, latency_ms, false, false);
+        .emit_receive(&req.customer_id, 202, latency_ms, false, false, false);
 
     let body = WebhookReceiveResponse {
         event_id,

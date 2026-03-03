@@ -35,3 +35,11 @@ FORCE_ALARM_STATE_TEST=true ./scripts/e2e_day6_observability.sh
 ```
 
 This validates metric visibility, delivery-attempt log fields, alarm existence, and forced alarm transitions.
+
+## Validate Ingestion Day 6
+
+```bash
+APPLY_DASHBOARD=true ./scripts/e2e_day6_ingestion_observability.sh
+```
+
+This validates ingestion dashboard presence, required ingestion metric names, and required ingestion alarms.

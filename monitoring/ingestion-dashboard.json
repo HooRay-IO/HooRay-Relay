@@ -153,6 +153,24 @@
           ["AWS/ApiGateway", "5XXError", "ApiName", "hooray-dev", { "label": "5xx errors", "color": "#d62728" }]
         ]
       }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 24,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Event Creation Errors (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.event.create.failure.count", "environment", "dev", "status_code", "500", { "label": "Event create failures", "color": "#d62728" }]
+        ]
+      }
     }
   ]
 }
