@@ -82,17 +82,17 @@ components:
         customer_id:
           type: string
           minLength: 1
-          maxLength: 128
           description: |
             Identifies the customer whose delivery configuration should be used.
             Must match a config previously registered via `POST /webhooks/configs`.
           example: "cust_xyz123"
         data:
-          type: object
           description: |
-            Arbitrary JSON payload forwarded verbatim to the customer endpoint.
-            The ingestion layer never inspects this object — it is stored and
-            delivered as-is. Maximum serialised size: 400 KB.
+            Arbitrary JSON value forwarded verbatim to the customer endpoint.
+            The ingestion layer never inspects or validates the shape — it
+            accepts any valid JSON (object, array, string, number, boolean, or
+            null), stores it as-is, and delivers it unchanged.
+            Maximum serialised size: 400 KB.
           example:
             order_id: "ord_12345"
             amount: 99.99
@@ -107,7 +107,6 @@ components:
         customer_id:
           type: string
           minLength: 1
-          maxLength: 128
           description: Unique identifier for the customer.
           example: "cust_xyz123"
         url:
