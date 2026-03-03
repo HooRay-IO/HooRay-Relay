@@ -40,7 +40,7 @@ impl SqsService {
             .await
             .map_err(|e| WorkerError::Sqs(format!("failed to receive messages: {e}")))?;
 
-        Ok(output.messages().iter().cloned().collect())
+        Ok(output.messages().to_vec())
     }
 
     pub async fn delete_message(&self, receipt_handle: &str) -> Result<(), WorkerError> {
