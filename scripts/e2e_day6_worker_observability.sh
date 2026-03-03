@@ -87,7 +87,7 @@ if [[ -z "$QUEUE_URL" || "$QUEUE_URL" == "null" ]]; then
 fi
 QUEUE_NAME="${QUEUE_URL##*/}"
 
-echo "[1/5] Generating success + failure traffic"
+echo "[1/6] Generating success + failure traffic"
 SUCCESS_OUT="$(mktemp)"
 FAILURE_OUT="$(mktemp)"
 
@@ -132,8 +132,10 @@ metric_names=(
 )
 
 metric_namespaces=("$METRIC_NAMESPACE")
-if [[ "$METRIC_NAMESPACE" != "HooRayRelay/Worker" ]]; then
-  metric_namespaces+=("HooRayRelay/Worker")
+LEGACY_METRIC_NAMESPACE="HooRayRelay/Worker"
+if [[ "$METRIC_NAMESPACE" != "$LEGACY_METRIC_NAMESPACE" ]]; then
+  # Keep legacy typo namespace as fallback for older deployments.
+  metric_namespaces+=("$LEGACY_METRIC_NAMESPACE")
 fi
 
 for metric in "${metric_names[@]}"; do

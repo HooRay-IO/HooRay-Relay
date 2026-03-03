@@ -110,9 +110,9 @@
         "period": 300,
         "stat": "Sum",
         "metrics": [
-          ["AWS/Lambda", "Errors",   "FunctionName", "IngestionFunction-dev", { "label": "Lambda errors",   "color": "#d62728" }],
-          ["AWS/Lambda", "Throttles","FunctionName", "IngestionFunction-dev", { "label": "Lambda throttles","color": "#ff7f0e" }],
-          ["AWS/Lambda", "Invocations","FunctionName","IngestionFunction-dev",{ "label": "Invocations",     "color": "#1f77b4" }]
+          ["AWS/Lambda", "Errors",   "FunctionName", "hooray-relay-ingestion-dev", { "label": "Lambda errors",   "color": "#d62728" }],
+          ["AWS/Lambda", "Throttles","FunctionName", "hooray-relay-ingestion-dev", { "label": "Lambda throttles","color": "#ff7f0e" }],
+          ["AWS/Lambda", "Invocations","FunctionName","hooray-relay-ingestion-dev",{ "label": "Invocations",     "color": "#1f77b4" }]
         ]
       }
     },
@@ -129,7 +129,7 @@
         "region": "us-west-2",
         "period": 300,
         "metrics": [
-          ["AWS/Lambda", "Duration", "FunctionName", "IngestionFunction-dev", { "stat": "p50",  "label": "p50" }],
+          ["AWS/Lambda", "Duration", "FunctionName", "hooray-relay-ingestion-dev", { "stat": "p50",  "label": "p50" }],
           [".",          ".",        ".",             ".",                      { "stat": "p95",  "label": "p95" }],
           [".",          ".",        ".",             ".",                      { "stat": "p99",  "label": "p99" }]
         ]
