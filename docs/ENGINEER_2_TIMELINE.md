@@ -254,23 +254,26 @@
 **Goal:** Improve retry logic and add exponential backoff
 
 **Tasks:**
-- [ ] Research optimal retry strategies
-- [ ] Implement exponential backoff:
+- [x] Research optimal retry strategies
+- [x] Implement exponential backoff:
   - Calculate delay: initial_delay * backoff^attempt
   - Add jitter to prevent thundering herd
-- [ ] Optimize SQS visibility timeout:
+- [x] Optimize SQS visibility timeout:
   - Dynamic based on attempt number
   - Longer timeout for later retries
-- [ ] Add circuit breaker pattern (optional):
-  - Track failures per endpoint
-  - Temporarily stop delivery if threshold exceeded
-- [ ] Test retry behavior with failing endpoint
-- [ ] Document retry schedule
+- [x] Test retry behavior with failing endpoint (unit-level resilience + worker retry path)
+- [x] Document retry schedule:
+  - base delay: 5s, multiplier: 2x, max delay: 5m, jitter max: 1s
+  - visibility timeout: clamp(retry_delay + 15s overhead, min 30s, max 1h)
 
 **Deliverables:**
 - Smarter retry strategy implemented
 - Jitter added
 - Performance improved
+
+**Note:** Defer async recloser/circuit-breaker hardening to Day 8+ after retry baseline is validated.
+- Deferred follow-up: Persist breaker state across worker restarts/instances (DynamoDB or ElastiCache/Redis)
+- Deferred follow-up: Add resilience observability metrics (breaker open/half-open/close, retry delay, visibility timeout set)
 
 **Commit:** `feat: optimize retry logic with exponential backoff`
 
