@@ -4,7 +4,7 @@ set -euo pipefail
 # Day 6 ingestion observability validation:
 # 1) Optionally apply ingestion dashboard
 # 2) Verify dashboard exists
-# 3) Verify required custom metrics are discoverable
+# 3) Verify ingestion metric names are discoverable
 # 4) Verify required alarms exist
 
 AWS_PROFILE="${AWS_PROFILE:-hooray-dev}"
@@ -15,7 +15,7 @@ APPLY_DASHBOARD="${APPLY_DASHBOARD:-false}"
 STRICT_METRICS="${STRICT_METRICS:-false}"
 
 DASHBOARD_NAME="${DASHBOARD_NAME:-hooray-relay-ingestion-${ENVIRONMENT}}"
-INGESTION_ERROR_ALARM_NAME="${INGESTION_ERROR_ALARM_NAME:-hooray-relay-ingestion-errors-${ENVIRONMENT}}"
+INGESTION_LAMBDA_ERROR_ALARM_NAME="${INGESTION_LAMBDA_ERROR_ALARM_NAME:-hooray-relay-ingestion-errors-${ENVIRONMENT}}"
 INGESTION_ENQUEUE_ALARM_NAME="${INGESTION_ENQUEUE_ALARM_NAME:-hooray-relay-ingestion-enqueue-failure-${ENVIRONMENT}}"
 INGESTION_EVENT_CREATE_ALARM_NAME="${INGESTION_EVENT_CREATE_ALARM_NAME:-hooray-relay-ingestion-event-create-failure-${ENVIRONMENT}}"
 INGESTION_LATENCY_ALARM_NAME="${INGESTION_LATENCY_ALARM_NAME:-hooray-relay-ingestion-latency-${ENVIRONMENT}}"
@@ -48,7 +48,7 @@ if ! aws cloudwatch get-dashboard \
 fi
 echo "  - dashboard present: $DASHBOARD_NAME"
 
-echo "[2/3] Verifying required custom metric names are discoverable"
+echo "[2/3] Verifying ingestion metric names are discoverable (always-on + scenario-based)"
 always_on_metric_names=(
   "webhook.receive.count"
   "webhook.receive.latency_ms"
@@ -86,7 +86,7 @@ for metric in "${scenario_metric_names[@]}"; do
       echo "ERROR: metric not found in namespace $METRIC_NAMESPACE: $metric" >&2
       exit 1
     fi
-    echo "  - warning: metric not found yet: $metric (emit at least one matching scenario, or set STRICT_METRICS=true to require it)"
+    echo "  - warning: scenario metric not found yet: $metric (emit at least one matching scenario, or set STRICT_METRICS=true to require it)"
     continue
   fi
   echo "  - metric present: $metric"
@@ -94,8 +94,8 @@ done
 
 echo "[3/3] Verifying required alarm names exist"
 alarms_json="$(aws cloudwatch describe-alarms \
-  --alarm-names \
-    "$INGESTION_ERROR_ALARM_NAME" \
+    --alarm-names \
+    "$INGESTION_LAMBDA_ERROR_ALARM_NAME" \
     "$INGESTION_ENQUEUE_ALARM_NAME" \
     "$INGESTION_EVENT_CREATE_ALARM_NAME" \
     "$INGESTION_LATENCY_ALARM_NAME" \
@@ -103,7 +103,7 @@ alarms_json="$(aws cloudwatch describe-alarms \
   --profile "$AWS_PROFILE")"
 
 for alarm in \
-  "$INGESTION_ERROR_ALARM_NAME" \
+  "$INGESTION_LAMBDA_ERROR_ALARM_NAME" \
   "$INGESTION_ENQUEUE_ALARM_NAME" \
   "$INGESTION_EVENT_CREATE_ALARM_NAME" \
   "$INGESTION_LATENCY_ALARM_NAME"; do
