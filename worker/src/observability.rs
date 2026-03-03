@@ -63,6 +63,20 @@ impl Observability {
             ("environment".to_string(), self.environment.clone()),
             ("queue_name".to_string(), self.queue_name.clone()),
         ];
+        let status_dims = vec![
+            ("environment".to_string(), self.environment.clone()),
+            ("queue_name".to_string(), self.queue_name.clone()),
+            ("status_code".to_string(), status_code),
+        ];
+
+        self.emit_metric("webhook.delivery.attempt", "Count", 1.0, &detailed_dims);
+        self.emit_metric("webhook.delivery.attempt", "Count", 1.0, &aggregate_dims);
+        self.emit_metric(
+            "webhook.delivery.http_status_code",
+            "Count",
+            1.0,
+            &status_dims,
+        );
 
         match result {
             DeliveryResult::Success => {

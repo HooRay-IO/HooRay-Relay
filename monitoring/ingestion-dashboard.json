@@ -110,9 +110,9 @@
         "period": 300,
         "stat": "Sum",
         "metrics": [
-          ["AWS/Lambda", "Errors",   "FunctionName", "IngestionFunction-dev", { "label": "Lambda errors",   "color": "#d62728" }],
-          ["AWS/Lambda", "Throttles","FunctionName", "IngestionFunction-dev", { "label": "Lambda throttles","color": "#ff7f0e" }],
-          ["AWS/Lambda", "Invocations","FunctionName","IngestionFunction-dev",{ "label": "Invocations",     "color": "#1f77b4" }]
+          ["AWS/Lambda", "Errors",   "FunctionName", "hooray-relay-ingestion-dev", { "label": "Lambda errors",   "color": "#d62728" }],
+          ["AWS/Lambda", "Throttles","FunctionName", "hooray-relay-ingestion-dev", { "label": "Lambda throttles","color": "#ff7f0e" }],
+          ["AWS/Lambda", "Invocations","FunctionName","hooray-relay-ingestion-dev",{ "label": "Invocations",     "color": "#1f77b4" }]
         ]
       }
     },
@@ -129,7 +129,7 @@
         "region": "us-west-2",
         "period": 300,
         "metrics": [
-          ["AWS/Lambda", "Duration", "FunctionName", "IngestionFunction-dev", { "stat": "p50",  "label": "p50" }],
+          ["AWS/Lambda", "Duration", "FunctionName", "hooray-relay-ingestion-dev", { "stat": "p50",  "label": "p50" }],
           [".",          ".",        ".",             ".",                      { "stat": "p95",  "label": "p95" }],
           [".",          ".",        ".",             ".",                      { "stat": "p99",  "label": "p99" }]
         ]
@@ -151,6 +151,24 @@
         "metrics": [
           ["AWS/ApiGateway", "4XXError", "ApiName", "hooray-dev", { "label": "4xx errors", "color": "#ff7f0e" }],
           ["AWS/ApiGateway", "5XXError", "ApiName", "hooray-dev", { "label": "5xx errors", "color": "#d62728" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 0,
+      "y": 24,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "Event Creation Errors (5m Sum)",
+        "view": "timeSeries",
+        "stacked": false,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Ingestion", "webhook.event.create.failure.count", "environment", "dev", "status_code", "500", { "label": "Event create failures", "color": "#d62728" }]
         ]
       }
     }

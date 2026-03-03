@@ -303,6 +303,26 @@ Resources:
       ComparisonOperator: GreaterThanOrEqualToThreshold
       TreatMissingData: notBreaching
 
+  # Fires when event creation fails in ingestion (serialization or DynamoDB write).
+  IngestionEventCreateFailureAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hooray-relay-ingestion-event-create-failure-${Environment}"
+      AlarmDescription: "Ingestion failed while creating/persisting event payload"
+      Namespace: HoorayRelay/Ingestion
+      MetricName: webhook.event.create.failure.count
+      Dimensions:
+        - Name: environment
+          Value: !Ref Environment
+        - Name: status_code
+          Value: "500"
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+
   # Fires when ingestion p95 latency exceeds 2 000 ms over a 5-minute window.
   IngestionLatencyAlarm:
     Type: AWS::CloudWatch::Alarm

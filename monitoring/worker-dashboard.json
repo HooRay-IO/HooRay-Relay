@@ -43,6 +43,23 @@
       "width": 12,
       "height": 6,
       "properties": {
+        "title": "Delivery Attempt Volume (5m Sum)",
+        "view": "timeSeries",
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Worker", "webhook.delivery.attempt", "environment", "dev", "queue_name", "webhook_delivery_dev"]
+        ]
+      }
+    },
+    {
+      "type": "metric",
+      "x": 12,
+      "y": 6,
+      "width": 12,
+      "height": 6,
+      "properties": {
         "title": "Worker Queue Depth (Custom Metric)",
         "view": "timeSeries",
         "region": "us-west-2",
@@ -55,8 +72,30 @@
     },
     {
       "type": "metric",
+      "x": 0,
+      "y": 12,
+      "width": 12,
+      "height": 6,
+      "properties": {
+        "title": "HTTP Status Breakdown (5m Sum)",
+        "view": "timeSeries",
+        "stacked": true,
+        "region": "us-west-2",
+        "period": 300,
+        "stat": "Sum",
+        "metrics": [
+          ["HoorayRelay/Worker", "webhook.delivery.http_status_code", "environment", "dev", "queue_name", "webhook_delivery_dev", "status_code", "200", { "label": "200" }],
+          [".", ".", ".", ".", ".", ".", "status_code", "400", { "label": "400" }],
+          [".", ".", ".", ".", ".", ".", "status_code", "404", { "label": "404" }],
+          [".", ".", ".", ".", ".", ".", "status_code", "500", { "label": "500" }],
+          [".", ".", ".", ".", ".", ".", "status_code", "none", { "label": "none" }]
+        ]
+      }
+    },
+    {
+      "type": "metric",
       "x": 12,
-      "y": 6,
+      "y": 12,
       "width": 12,
       "height": 6,
       "properties": {

@@ -1,8 +1,8 @@
-# Worker Monitoring Artifacts
+# Day 6 Monitoring Artifacts
 
-These files support Day 6 monitoring rollout for the delivery worker.
+These files support Day 6 monitoring rollout for both ingestion and worker services.
 
-## Apply Dashboard
+## Worker: Apply Dashboard
 
 ```bash
 aws cloudwatch put-dashboard \
@@ -12,7 +12,7 @@ aws cloudwatch put-dashboard \
   --profile hooray-dev
 ```
 
-## Apply Alarms
+## Worker: Apply Alarms
 
 ```bash
 aws cloudwatch put-metric-alarm \
@@ -27,3 +27,19 @@ aws cloudwatch put-metric-alarm \
 ```
 
 `DLQDepthAlarm` is provisioned via `template.yaml` and should remain enabled.
+
+## Worker: Validate Day 6 End-to-End
+
+```bash
+FORCE_ALARM_STATE_TEST=true ./scripts/e2e_day6_worker_observability.sh
+```
+
+This validates metric visibility, delivery-attempt log fields, alarm existence, and forced alarm transitions.
+
+## Ingestion: Validate Day 6
+
+```bash
+APPLY_DASHBOARD=true ./scripts/e2e_day6_ingestion_observability.sh
+```
+
+This validates ingestion dashboard presence, required ingestion metric names, and required ingestion alarms.

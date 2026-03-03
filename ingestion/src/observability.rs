@@ -7,6 +7,7 @@
 //! |--------------------------------------|--------------|-------------------------------------|
 //! | `webhook.receive.count`              | Count        | Every `POST /webhooks/receive` call |
 //! | `webhook.idempotency.duplicate.count`| Count        | Duplicate idempotency key detected  |
+//! | `webhook.event.create.failure.count` | Count        | Event write/serialization fails      |
 //! | `webhook.enqueue.failure.count`      | Count        | SQS `enqueue_event` returns `Err`   |
 //! | `webhook.receive.latency_ms`         | Milliseconds | End-to-end handler latency          |
 //!
@@ -70,6 +71,7 @@ impl Observability {
     /// - Always emits `webhook.receive.count` (1).
     /// - Always emits `webhook.receive.latency_ms` (end-to-end handler latency).
     /// - Emits `webhook.idempotency.duplicate.count` when `is_duplicate = true`.
+    /// - Emits `webhook.event.create.failure.count` when `event_create_failed = true`.
     /// - Emits `webhook.enqueue.failure.count` when `enqueue_failed = true`.
     ///
     /// # Arguments
@@ -78,6 +80,7 @@ impl Observability {
     /// * `status_code`    — the HTTP status code returned to the caller.
     /// * `latency_ms`     — end-to-end handler latency in milliseconds.
     /// * `is_duplicate`   — true when the idempotency check returned `Duplicate`.
+    /// * `event_create_failed` — true when event serialization/write fails.
     /// * `enqueue_failed` — true when `queue::enqueue_event` returned `Err`.
     pub fn emit_receive(
         &self,
@@ -85,6 +88,7 @@ impl Observability {
         status_code: u16,
         latency_ms: u64,
         is_duplicate: bool,
+        event_create_failed: bool,
         enqueue_failed: bool,
     ) {
         let status_str = status_code.to_string();
@@ -123,6 +127,21 @@ impl Observability {
             );
             self.emit_metric(
                 "webhook.idempotency.duplicate.count",
+                "Count",
+                1.0,
+                &aggregate_dims,
+            );
+        }
+
+        if event_create_failed {
+            self.emit_metric(
+                "webhook.event.create.failure.count",
+                "Count",
+                1.0,
+                &detailed_dims,
+            );
+            self.emit_metric(
+                "webhook.event.create.failure.count",
                 "Count",
                 1.0,
                 &aggregate_dims,

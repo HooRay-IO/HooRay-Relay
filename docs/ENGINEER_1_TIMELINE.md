@@ -168,16 +168,16 @@
 **Goal:** Add comprehensive monitoring and logging
 
 **Tasks:**
-- [ ] Create CloudWatch dashboard with key metrics:
+- [x] Create CloudWatch dashboard with key metrics:
   - Webhook receive rate (per minute)
   - Idempotency hit rate
   - Event creation errors
   - SQS enqueue failures
   - API latency (p50, p95, p99)
-- [ ] Add CloudWatch metric emission to handlers
-- [ ] Set up alarms for error rates
-- [ ] Add X-Ray tracing (optional)
-- [ ] Test dashboard displays metrics
+- [x] Add CloudWatch metric emission to handlers
+- [x] Set up alarms for error rates
+- [x] Add X-Ray tracing (optional, deferred for MVP)
+- [x] Test dashboard displays metrics
 
 **Deliverables:**
 - CloudWatch dashboard operational
