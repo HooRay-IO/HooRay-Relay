@@ -113,8 +113,9 @@ components:
           type: string
           format: uri
           description: |
-            HTTPS endpoint that HooRay will POST webhook events to.
-            Must be publicly reachable by the delivery worker.
+            HTTP(S) endpoint that HooRay will POST webhook events to.
+            Must be publicly reachable by the delivery worker. Using HTTPS is
+            strongly recommended.
           example: "https://customer.example.com/webhooks"
         secret:
           type: string

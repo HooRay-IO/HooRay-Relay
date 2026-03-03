@@ -644,6 +644,7 @@ pub struct Observability {
 | `webhook.receive.latency_ms` | Milliseconds | Every `POST /webhooks/receive` call |
 | `webhook.idempotency.duplicate.count` | Count | Idempotency key already seen |
 | `webhook.enqueue.failure.count` | Count | SQS `enqueue_event` returns `Err` |
+| `webhook.event.create.failure.count` | Count | Event serialization/write fails in `Observability::emit_receive` |
 | `webhook.config.create.count` | Count | Every `POST /webhooks/configs` call |
 | `webhook.config.get.count` | Count | Every `GET /webhooks/configs` call |
 
@@ -678,8 +679,7 @@ Each metric is a single `println!` of a JSON log line, e.g.:
 ```
 
 No SDK calls, no extra IAM on the hot path — CloudWatch Logs extracts the metrics
-automatically. The only IAM addition is `cloudwatch:PutMetricData` added to
-`template.yaml` for alarm backfill scenarios.
+automatically.
 
 ### CloudWatch dashboard: `monitoring/ingestion-dashboard.json`
 
