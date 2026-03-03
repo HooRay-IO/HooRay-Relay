@@ -88,6 +88,16 @@ fi
 QUEUE_NAME="${QUEUE_URL##*/}"
 
 echo "[1/6] Generating success + failure traffic"
+cleanup() {
+  if [[ -n "${SUCCESS_OUT:-}" && -f "${SUCCESS_OUT:-}" ]]; then
+    rm -f "$SUCCESS_OUT"
+  fi
+  if [[ -n "${FAILURE_OUT:-}" && -f "${FAILURE_OUT:-}" ]]; then
+    rm -f "$FAILURE_OUT"
+  fi
+}
+
+trap cleanup EXIT
 SUCCESS_OUT="$(mktemp)"
 FAILURE_OUT="$(mktemp)"
 

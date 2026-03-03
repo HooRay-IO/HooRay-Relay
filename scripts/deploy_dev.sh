@@ -78,6 +78,7 @@ if [[ "$PUSH_WORKER_IMAGE" == "true" ]]; then
   echo "Ensure WorkerImageUri in samconfig.local.toml points to :${LATEST_TAG}"
 fi
 
+require_cmd sam
 # Keep build artifacts aligned with the current template before deploy.
 sam build --cached --parallel
 sam deploy --resolve-s3 --config-file samconfig.local.toml --config-env default
