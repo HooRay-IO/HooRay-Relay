@@ -6,8 +6,8 @@ use aws_sdk_dynamodb::Client as DynamoDbClient;
 use aws_sdk_sqs::types::Message;
 use chrono::Duration as ChronoDuration;
 use observability::Observability;
-use resilience::ResilienceConfig;
 use resilience::BreakerMode;
+use resilience::ResilienceConfig;
 use resilience::breaker::{on_failure, on_success, should_allow_request};
 use resilience::retry::{
     build_resilience_outcome_from_delivery_result, calculate_retry_decision,
@@ -20,7 +20,8 @@ use tokio::sync::Mutex;
 use tracing::{error, info, warn};
 
 use crate::model::{
-    DeliveryErrorClass, DeliveryResult, EventStatus, QueueMessage, WorkerError, classify_worker_error,
+    DeliveryErrorClass, DeliveryResult, EventStatus, QueueMessage, WorkerError,
+    classify_worker_error,
 };
 
 #[derive(Clone, Copy)]
@@ -170,7 +171,11 @@ impl Worker {
         let mut breaker_state = self.get_breaker_state(&endpoint_key).await;
         let before_gate_mode = breaker_state.mode;
         if !should_allow_request(&mut breaker_state, now) {
-            self.emit_breaker_transition_metric(&event.customer_id, before_gate_mode, breaker_state.mode);
+            self.emit_breaker_transition_metric(
+                &event.customer_id,
+                before_gate_mode,
+                breaker_state.mode,
+            );
             let retry_delay_secs = self.retry_delay_from_breaker(now, &breaker_state).max(1);
             self.set_breaker_state(endpoint_key.clone(), breaker_state)
                 .await;
@@ -182,7 +187,11 @@ impl Worker {
                 )
                 .await;
         }
-        self.emit_breaker_transition_metric(&event.customer_id, before_gate_mode, breaker_state.mode);
+        self.emit_breaker_transition_metric(
+            &event.customer_id,
+            before_gate_mode,
+            breaker_state.mode,
+        );
         self.set_breaker_state(endpoint_key.clone(), breaker_state.clone())
             .await;
 
@@ -203,7 +212,11 @@ impl Worker {
                     chrono::Utc::now().timestamp(),
                     &self.resilience_config,
                 );
-                self.emit_breaker_transition_metric(&event.customer_id, prev_mode, breaker_state.mode);
+                self.emit_breaker_transition_metric(
+                    &event.customer_id,
+                    prev_mode,
+                    breaker_state.mode,
+                );
                 self.set_breaker_state(endpoint_key.clone(), breaker_state)
                     .await;
                 event.mark_delivered(chrono::Utc::now().timestamp());
@@ -218,7 +231,11 @@ impl Worker {
                     chrono::Utc::now().timestamp(),
                     &self.resilience_config,
                 );
-                self.emit_breaker_transition_metric(&event.customer_id, prev_mode, breaker_state.mode);
+                self.emit_breaker_transition_metric(
+                    &event.customer_id,
+                    prev_mode,
+                    breaker_state.mode,
+                );
                 self.set_breaker_state(endpoint_key.clone(), breaker_state.clone())
                     .await;
                 let outcome = build_resilience_outcome_from_delivery_result(DeliveryResult::Retry);
@@ -259,7 +276,11 @@ impl Worker {
                     chrono::Utc::now().timestamp(),
                     &self.resilience_config,
                 );
-                self.emit_breaker_transition_metric(&event.customer_id, prev_mode, breaker_state.mode);
+                self.emit_breaker_transition_metric(
+                    &event.customer_id,
+                    prev_mode,
+                    breaker_state.mode,
+                );
                 self.set_breaker_state(endpoint_key, breaker_state).await;
                 event.mark_failed();
                 self.dynamodb_service.update_event_status(&event).await?;
@@ -404,7 +425,9 @@ impl Worker {
                         error = %err,
                         "breaker version conflict; refreshing cached breaker state from DynamoDB"
                     );
-                    if let Some(latest) = self.dynamodb_service.get_breaker_state(&endpoint_key).await {
+                    if let Some(latest) =
+                        self.dynamodb_service.get_breaker_state(&endpoint_key).await
+                    {
                         let mut states = self.breaker_states.lock().await;
                         states.insert(endpoint_key, latest);
                     }
@@ -479,7 +502,9 @@ impl Worker {
         }
         match to {
             BreakerMode::Open => self.observability.emit_circuit_breaker_open(customer_id),
-            BreakerMode::HalfOpen => self.observability.emit_circuit_breaker_half_open(customer_id),
+            BreakerMode::HalfOpen => self
+                .observability
+                .emit_circuit_breaker_half_open(customer_id),
             BreakerMode::Closed => self.observability.emit_circuit_breaker_close(customer_id),
         }
     }

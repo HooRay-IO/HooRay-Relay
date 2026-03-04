@@ -128,7 +128,12 @@ impl Observability {
 
     pub fn emit_retry_delay_ms(&self, customer_id: &str, retry_delay_ms: i64) {
         let dimensions = self.resilience_dimensions(customer_id);
-        self.emit_metric("RetryDelayMs", "Milliseconds", retry_delay_ms as f64, &dimensions);
+        self.emit_metric(
+            "RetryDelayMs",
+            "Milliseconds",
+            retry_delay_ms as f64,
+            &dimensions,
+        );
     }
 
     pub fn emit_visibility_timeout_seconds(&self, customer_id: &str, visibility_timeout: i64) {

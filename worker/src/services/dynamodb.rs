@@ -380,10 +380,7 @@ impl DynamoDbService {
                 AttributeValue::S(BreakerState::pk(endpoint_key.to_string())),
             )
             .item("sk", AttributeValue::S(BreakerState::sk().to_string()))
-            .item(
-                "endpoint_key",
-                AttributeValue::S(endpoint_key.to_string()),
-            )
+            .item("endpoint_key", AttributeValue::S(endpoint_key.to_string()))
             .item(
                 "mode",
                 AttributeValue::S(
