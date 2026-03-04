@@ -61,7 +61,7 @@ curl -s -X POST https://<base-url>/webhooks/receive \
   }' | jq .
 
 # 3. Check your endpoint received the delivery
-# → HooRay POSTs the `data` object to your registered URL within seconds.
+# → HooRay POSTs the `data` JSON value to your registered URL within seconds.
 ```
 
 ---
@@ -243,26 +243,11 @@ function verifySignature(bodyBuffer, secret, signatureHeader) {
   const expected =
     "sha256=" +
     crypto.createHmac("sha256", secret).update(bodyBuffer).digest("hex");
-
-  // Normalize and validate the incoming header
-  if (typeof signatureHeader !== "string") {
-    return false;
-  }
-  const normalized = signatureHeader.trim();
-  if (!normalized.startsWith("sha256=")) {
-    return false;
-  }
-
-  const expectedBuf = Buffer.from(expected, "utf8");
-  const receivedBuf = Buffer.from(normalized, "utf8");
-
-  // timingSafeEqual throws if buffer lengths differ, so guard first
-  if (expectedBuf.length !== receivedBuf.length) {
-    return false;
-  }
-
   // constant-time comparison
-  return crypto.timingSafeEqual(expectedBuf, receivedBuf);
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signatureHeader)
+  );
 }
 
 // Express middleware example:
@@ -449,8 +434,7 @@ async function sendEvent(customerId, idempotencyKey, data) {
 
   if (!res.ok) {
     const err = await res.json();
-    const message = (err && (err.error || err.message)) || "Unknown error";
-    throw new Error(`${res.status} ${message}`);
+    throw new Error(`${res.status} ${err.error}: ${err.message}`);
   }
 
   return res.json(); // { event_id, status, created_at }

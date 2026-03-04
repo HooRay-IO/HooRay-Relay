@@ -15,3 +15,4 @@ pub mod dynamodb;
 pub mod events;
 pub mod idempotency;
 pub mod queue;
+pub mod reconcile;

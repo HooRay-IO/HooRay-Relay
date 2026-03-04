@@ -199,7 +199,7 @@
   - Error codes
   - Authentication requirements
 - [x] Create `docs/customer-guide.md` for API users
-- [ ] Create Postman collection for testing
+- [x] Create Postman collection for testing
 - [x] Add example code snippets (curl, Python, Node.js)
 
 **Deliverables:**

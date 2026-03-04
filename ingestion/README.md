@@ -1,15 +1,15 @@
-# Ingestion Service — Engineer 1 (Days 1–6)
+# Ingestion Service — Engineer 1 (Days 1–6 + Reliability Fixes)
 
 > **Sprint context:** Engineer 1 owns the webhook ingestion pipeline; Engineer 2
 > owns the delivery worker (`../worker/`). This document is the living engineering
-> log for all six days of ingestion work — what was built, the thinking behind
+> log for all six days of ingestion work — plus follow-up reliability fixes — what was built, the thinking behind
 > every design decision, the bugs encountered, and how they were solved.
 
 ---
 
 ## Table of Contents
 
-1. [What Was Built — All Five Days](#1-what-was-built--all-five-days)
+1. [What Was Built — All Six Days + Fixes](#1-what-was-built--all-six-days--fixes)
 2. [Project Structure](#2-project-structure)
 3. [Dependency Choices](#3-dependency-choices)
 4. [Data Models](#4-data-models)
@@ -22,10 +22,11 @@
 11. [Running the Tests](#11-running-the-tests)
 12. [Roadmap — Week 2](#12-roadmap--week-2)
 13. [Day 6 — CloudWatch Observability](#13-day-6--cloudwatch-observability)
+14. [Reliability Fix — Orphaned Event Reconciliation](#14-reliability-fix--orphaned-event-reconciliation)
 
 ---
 
-## 1. What Was Built — All Five Days
+## 1. What Was Built — All Six Days + Fixes
 
 | Day | Deliverable | File | Tests |
 |-----|-------------|------|-------|
@@ -43,6 +44,7 @@
 | 6 | CloudWatch EMF observability module | `src/observability.rs` | 6 |
 | 6 | CloudWatch dashboard (8 widgets) | `monitoring/ingestion-dashboard.json` | — |
 | 6 | CloudWatch alarms + Lambda IAM policy | `template.yaml` | — |
+| 6.5 | Orphaned event reconciliation (ingestion-only) | `src/services/events.rs`, `src/services/reconcile.rs`, `src/bin/reconcile_orphaned.rs` | — |
 
 **Total: 75 ingestion tests — 0 failures, 0 warnings.**
 
@@ -54,14 +56,18 @@
 ingestion/
 ├── Cargo.toml
 └── src/
+  ├── lib.rs                    ← shared library exports for binaries
     ├── main.rs                   ← Lambda entry point (Day 4)
     ├── model.rs                  ← all shared types, validation, error enum
+  ├── bin/
+  │   └── reconcile_orphaned.rs  ← re-enqueue orphaned events (Day 6.5)
     ├── services/
     │   ├── mod.rs
     │   ├── dynamodb.rs           ← AppConfig::from_env() + DynamoDB client factory
     │   ├── idempotency.rs        ← atomic conditional PutItem dedup (Day 2)
     │   ├── events.rs             ← persist WebhookEvent to DynamoDB (Day 2)
     │   ├── queue.rs              ← enqueue onto SQS with customer_id attribute (Day 3)
+  │   ├── reconcile.rs           ← orphaned event reconciliation helpers (Day 6.5)
     │   └── configs.rs            ← DynamoDB CRUD for webhook_configs table (Day 4)
     └── handlers/
         ├── mod.rs
@@ -603,7 +609,6 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 
 | Item | Priority | Notes |
 |---|---|---|
-| `WebhookEvent` TTL field missing from DynamoDB serialization | High | `ttl` attribute needs to be injected at write time (same pattern as configs PK/SK) |
 | Config validation (URL format, secret length) | Medium | `CreateConfigRequest` has no `validate()` method yet |
 | `GET /webhooks/configs` authentication | Medium | Currently anyone can read any customer's config by guessing `customer_id` |
 | `duplicate` response `created_at` returns "now" not original timestamp | Low | Would require fetching full `IdempotencyRecord`; scoped for Week 2 |
@@ -644,7 +649,6 @@ pub struct Observability {
 | `webhook.receive.latency_ms` | Milliseconds | Every `POST /webhooks/receive` call |
 | `webhook.idempotency.duplicate.count` | Count | Idempotency key already seen |
 | `webhook.enqueue.failure.count` | Count | SQS `enqueue_event` returns `Err` |
-| `webhook.event.create.failure.count` | Count | Event serialization/write fails in `Observability::emit_receive` |
 | `webhook.config.create.count` | Count | Every `POST /webhooks/configs` call |
 | `webhook.config.get.count` | Count | Every `GET /webhooks/configs` call |
 
@@ -679,7 +683,8 @@ Each metric is a single `println!` of a JSON log line, e.g.:
 ```
 
 No SDK calls, no extra IAM on the hot path — CloudWatch Logs extracts the metrics
-automatically.
+automatically. The only IAM addition is `cloudwatch:PutMetricData` added to
+`template.yaml` for alarm backfill scenarios.
 
 ### CloudWatch dashboard: `monitoring/ingestion-dashboard.json`
 
@@ -744,6 +749,44 @@ state.observability.emit_config_create(&req.customer_id, status_code);
 // config.rs — GET /webhooks/configs
 state.observability.emit_config_get(&customer_id, status_code);
 ```
+
+---
+
+## 14. Reliability Fix — Orphaned Event Reconciliation
+
+### Goal
+
+Recover events that were persisted to DynamoDB but not enqueued to SQS due to
+transient failures, without scanning the entire table.
+
+### What changed
+
+- When SQS enqueue fails, the handler marks the event as **orphaned** by
+  writing `gsi1pk = ORPHANED` and a time-ordered `gsi1sk` on the existing
+  event metadata item.
+- A lightweight reconciliation job queries the existing
+  `gsi1-retry-index` for orphaned events and re-enqueues them safely.
+
+### New files
+
+```
+ingestion/src/
+├── services/
+│   └── reconcile.rs             ← re-enqueue orphaned events
+└── bin/
+    └── reconcile_orphaned.rs    ← CLI runner / scheduled job entrypoint
+```
+
+### How to run (manual)
+
+```
+RECONCILE_MIN_AGE_SECS=120 \
+RECONCILE_LIMIT=25 \
+cargo run -p ingestion --bin reconcile_orphaned
+```
+
+The runner re-enqueues only **pending** events with `attempt_count == 0`, and
+clears the orphaned marker after a successful re-queue.
 
 `start` is a `std::time::Instant` captured at handler entry — no async overhead,
 no extra allocations on the hot path.

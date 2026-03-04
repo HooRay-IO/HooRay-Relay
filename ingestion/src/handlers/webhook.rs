@@ -215,6 +215,16 @@ pub async fn receive_webhook(
         // perform manual re-queueing or run a separate reconciliation job that
         // scans for persisted-but-not-enqueued events and enqueues them.
         error!(error = %e, event_id = %event_id, "failed to enqueue event on SQS");
+        if let Err(err) = events::mark_event_orphaned(
+            &state.dynamo,
+            &state.config.events_table,
+            &event_id,
+            created_at,
+        )
+        .await
+        {
+            warn!(error = %err, event_id = %event_id, "failed to mark event as orphaned");
+        }
         let resp = ingestion_error_response(e);
         state.observability.emit_receive(
             &req.customer_id,
