@@ -1,4 +1,7 @@
-use crate::model::{DeliveryAttempt, Event, EventStatus, WebhookConfig, WorkerError};
+use crate::{
+    model::{DeliveryAttempt, Event, EventStatus, WebhookConfig, WorkerError},
+    resilience::{BreakerMode, BreakerState},
+};
 use aws_sdk_dynamodb::Client;
 use aws_sdk_dynamodb::types::AttributeValue;
 use std::collections::HashMap;
@@ -117,6 +120,7 @@ pub struct DynamoDbService {
     webhook_events_table: String,
     // webhook_idempotency_table: String,
     webhook_configs_table: String,
+    breaker_states_table: String,
 }
 
 impl DynamoDbService {
@@ -125,12 +129,14 @@ impl DynamoDbService {
         webhook_events_table: String,
         // webhook_idempotency_table: String,
         webhook_configs_table: String,
+        breaker_states_table: String,
     ) -> Self {
         Self {
             client,
             webhook_events_table,
             // webhook_idempotency_table,
             webhook_configs_table,
+            breaker_states_table,
         }
     }
 
@@ -152,7 +158,10 @@ impl DynamoDbService {
                 WorkerError::DynamoDb(format!("Failed to fetch event with ID {}: {}", event_id, e))
             })?;
 
-        let event = parse_event_item(resp.item)?;
+        let item = resp
+            .item
+            .ok_or_else(|| WorkerError::EventNotFound(event_id.to_string()))?;
+        let event = parse_event_item(Some(item))?;
         info!(attempt_count = event.attempt_count, "fetched event");
         Ok(event)
     }
@@ -179,7 +188,10 @@ impl DynamoDbService {
                 ))
             })?;
 
-        let config = parse_config_item(resp.item)?;
+        let item = resp
+            .item
+            .ok_or_else(|| WorkerError::ConfigNotFound(customer_id.to_string()))?;
+        let config = parse_config_item(Some(item))?;
         if config.active {
             info!("fetched active webhook config");
         } else {
@@ -306,6 +318,166 @@ impl DynamoDbService {
 
         info!("updated attempt count");
         Ok(())
+    }
+
+    #[instrument(skip(self), fields(endpoint_key = %endpoint_key))]
+    pub async fn get_breaker_state(&self, endpoint_key: &str) -> Option<BreakerState> {
+        // Implementation would involve fetching the breaker state item from DynamoDB and parsing it
+        info!("fetching breaker state");
+        let pk = BreakerState::pk(endpoint_key.to_string());
+        let sk = BreakerState::sk().to_string();
+
+        match self
+            .client
+            .get_item()
+            .table_name(&self.breaker_states_table)
+            .key("pk", AttributeValue::S(pk))
+            .key("sk", AttributeValue::S(sk))
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                if let Some(item) = resp.item {
+                    match parse_breaker_state_item(item) {
+                        Ok(state) => {
+                            info!(mode = ?state.mode, "fetched breaker state");
+                            Some(state)
+                        }
+                        Err(e) => {
+                            error!(error = %e, "failed to parse breaker state item");
+                            None
+                        }
+                    }
+                } else {
+                    info!("breaker state not found");
+                    None
+                }
+            }
+            Err(e) => {
+                error!(error = %e, "failed to fetch breaker state");
+                None
+            }
+        }
+    }
+
+    pub async fn put_breaker_state(
+        &self,
+        endpoint_key: &str,
+        state: &BreakerState,
+        expected_version: u64,
+    ) -> Result<(), WorkerError> {
+        self.client
+            .put_item()
+            .table_name(&self.breaker_states_table)
+            .condition_expression("attribute_not_exists(#version) OR #version = :expected_version")
+            .expression_attribute_names("#version", "version")
+            .expression_attribute_values(
+                ":expected_version",
+                AttributeValue::N(expected_version.to_string()),
+            )
+            .item(
+                "pk",
+                AttributeValue::S(BreakerState::pk(endpoint_key.to_string())),
+            )
+            .item("sk", AttributeValue::S(BreakerState::sk().to_string()))
+            .item(
+                "endpoint_key",
+                AttributeValue::S(endpoint_key.to_string()),
+            )
+            .item(
+                "mode",
+                AttributeValue::S(
+                    match state.mode {
+                        BreakerMode::Closed => "closed",
+                        BreakerMode::Open => "open",
+                        BreakerMode::HalfOpen => "half_open",
+                    }
+                    .to_string(),
+                ),
+            )
+            .item(
+                "consecutive_failures",
+                AttributeValue::N(state.consecutive_failures.to_string()),
+            )
+            .item(
+                "consecutive_successes",
+                AttributeValue::N(state.consecutive_successes.to_string()),
+            )
+            .item(
+                "opened_at",
+                match state.opened_at {
+                    Some(ts) => AttributeValue::N(ts.to_string()),
+                    None => AttributeValue::Null(true),
+                },
+            )
+            .item(
+                "next_probe_at",
+                match state.next_probe_at {
+                    Some(ts) => AttributeValue::N(ts.to_string()),
+                    None => AttributeValue::Null(true),
+                },
+            )
+            .item(
+                "last_failure_at",
+                match state.last_failure_at {
+                    Some(ts) => AttributeValue::N(ts.to_string()),
+                    None => AttributeValue::Null(true),
+                },
+            )
+            .item(
+                "last_success_at",
+                match state.last_success_at {
+                    Some(ts) => AttributeValue::N(ts.to_string()),
+                    None => AttributeValue::Null(true),
+                },
+            )
+            .item(
+                "half_open_in_flight",
+                AttributeValue::Bool(state.half_open_in_flight),
+            )
+            .item("version", AttributeValue::N(state.version.to_string()))
+            .send()
+            .await
+            .map_err(|e| WorkerError::DynamoDb(format!("failed to put breaker state: {e}")))?;
+        info!("put breaker state");
+        Ok(())
+    }
+}
+
+fn parse_breaker_state_item(
+    item: HashMap<String, AttributeValue>,
+) -> Result<BreakerState, WorkerError> {
+    Ok(BreakerState {
+        endpoint_key: get_string_attr(required_attr(&item, "endpoint_key")?)?,
+        mode: parse_breaker_mode_attr(required_attr(&item, "mode")?)?,
+        consecutive_failures: get_number_attr(required_attr(&item, "consecutive_failures")?)?
+            as u32,
+        consecutive_successes: get_number_attr(required_attr(&item, "consecutive_successes")?)?
+            as u32,
+        opened_at: optional_number_attr(&item, "opened_at")?,
+        next_probe_at: optional_number_attr(&item, "next_probe_at")?,
+        last_failure_at: optional_number_attr(&item, "last_failure_at")?,
+        last_success_at: optional_number_attr(&item, "last_success_at")?,
+        half_open_in_flight: get_bool_attr(required_attr(&item, "half_open_in_flight")?)?,
+        version: optional_number_attr(&item, "version")?.unwrap_or(0) as u64,
+    })
+}
+
+fn parse_breaker_mode_attr(attr: &AttributeValue) -> Result<BreakerMode, WorkerError> {
+    if let AttributeValue::S(s) = attr {
+        match s.as_str() {
+            "closed" => Ok(BreakerMode::Closed),
+            "open" => Ok(BreakerMode::Open),
+            "half_open" => Ok(BreakerMode::HalfOpen),
+            _ => Err(WorkerError::DecodeDynamo(format!(
+                "Invalid breaker mode value: {}",
+                s
+            ))),
+        }
+    } else {
+        Err(WorkerError::DecodeDynamo(
+            "Expected string attribute for breaker mode".to_string(),
+        ))
     }
 }
 
@@ -480,6 +652,7 @@ mod tests {
     async fn validates_attempt_recording_and_event_updates() {
         let events_table = must_env("WEBHOOK_EVENTS_TABLE");
         let configs_table = must_env("WEBHOOK_CONFIGS_TABLE");
+        let breaker_states_table = must_env("BREAKER_STATES_TABLE");
         let _region = must_env("AWS_REGION");
         let ts_now = now_unix_secs();
         let unique = format!(
@@ -496,8 +669,12 @@ mod tests {
 
         let shared_config = aws_config::load_defaults(BehaviorVersion::latest()).await;
         let client = Client::new(&shared_config);
-        let service =
-            DynamoDbService::new(client.clone(), events_table.clone(), configs_table.clone());
+        let service = DynamoDbService::new(
+            client.clone(),
+            events_table.clone(),
+            configs_table.clone(),
+            breaker_states_table.clone(),
+        );
         let mut cleanup = CleanupGuard::new(client.clone());
 
         client

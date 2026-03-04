@@ -18,7 +18,6 @@ This folder contains copy-pasteable templates and a deploy helper for the non-La
 ## Required environment variables for deploy script
 
 - `AWS_REGION`
-- `AWS_ACCOUNT_ID`
 - `ECS_CLUSTER`
 - `ECS_SERVICE`
 - `WORKER_TASK_ROLE_ARN`
@@ -30,6 +29,8 @@ Optional:
 - `CPU` (default: `256`)
 - `MEMORY` (default: `512`)
 - `CONTAINER_NAME` (default: `worker`)
+- `TASK_FAMILY` (default: `ECS_SERVICE`)
+- `LOG_GROUP_NAME` (default: `/ecs/${ECS_SERVICE}`)
 - `DESIRED_COUNT` (default: unchanged)
 
 ## Create policy from template
@@ -48,11 +49,11 @@ Attach `/tmp/worker-task-policy.json` to your worker task role.
 ```bash
 export AWS_REGION=us-west-2
 export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-export ECS_CLUSTER=hooray-relay
-export ECS_SERVICE=hooray-relay-worker
-export WORKER_TASK_ROLE_ARN=arn:aws:iam::123456789012:role/hooray-relay-worker-task-role
-export WORKER_EXECUTION_ROLE_ARN=arn:aws:iam::123456789012:role/ecsTaskExecutionRole
-export WORKER_IMAGE_URI=123456789012.dkr.ecr.us-west-2.amazonaws.com/hooray-relay-worker:abc123
+export ECS_CLUSTER=hooray-relay-worker-dev
+export ECS_SERVICE=hooray-relay-worker-dev
+export WORKER_TASK_ROLE_ARN=arn:aws:iam::123456789012:role/hooray-relay-worker-task-dev
+export WORKER_EXECUTION_ROLE_ARN=arn:aws:iam::123456789012:role/hooray-relay-worker-exec-dev
+export WORKER_IMAGE_URI=123456789012.dkr.ecr.us-west-2.amazonaws.com/hooray-relay-worker-dev:dev-latest
 export STACK_NAME=hooray-dev
 
 ./infra/ecs/deploy_worker_service.sh
@@ -63,3 +64,4 @@ This script:
 2. Renders task definition JSON.
 3. Registers new task definition revision.
 4. Updates ECS service to that revision.
+5. Uses ARM64 runtime platform to match the worker deployment target.
