@@ -1,0 +1,82 @@
+---
+name: Deploy (staging)
+
+"on":
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - prod
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  AWS_REGION: us-west-2
+  STACK_NAME_PREFIX: hooray
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust deps
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hooray-relay-rust
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Install Cargo Lambda
+        run: cargo install cargo-lambda --version 1.3.0 --locked
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.11.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Rust tests
+        run: cargo test --workspace --all-features --locked
+
+      - name: Build SAM app
+        run: sam build --parallel
+
+      - name: Deploy SAM stack
+        env:
+          DEPLOY_ENV: ${{ inputs.environment || 'staging' }}
+        run: |
+          STACK_NAME="${STACK_NAME_PREFIX}-${DEPLOY_ENV}"
+          sam deploy \
+            --stack-name "$STACK_NAME" \
+            --region "$AWS_REGION" \
+            --resolve-s3 \
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides "Environment=${DEPLOY_ENV} SqsVisibilityTimeoutSeconds=60 SqsMaxReceiveCount=4 EnableEcsWorker=false"

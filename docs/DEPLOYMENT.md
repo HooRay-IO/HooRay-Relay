@@ -1,9 +1,35 @@
 # HooRay-Relay — Deployment Guide
 
+This guide covers both CI/CD (Day 8) and manual deployment steps. The CI/CD
+workflow is the recommended path for staging and production.
 
 ---
 
-## 1. Tooling Status
+## 1. CI/CD Pipeline (Day 8)
+
+The workflow in `.github/workflows/deploy.yml` deploys the SAM stack to
+**staging** on every push to `main`. It can also be triggered manually for
+`staging` or `prod`.
+
+**Pipeline steps:**
+1. Run Rust tests (`cargo test --workspace --all-features --locked`).
+2. Build the SAM app (`sam build --parallel`).
+3. Deploy via `sam deploy` with `--resolve-s3` and parameter overrides.
+
+### Required GitHub secret
+
+- `AWS_DEPLOY_ROLE_ARN` — IAM role ARN for GitHub OIDC to assume.
+
+The role must allow CloudFormation, S3, Lambda, DynamoDB, SQS, API Gateway,
+and IAM (named role creation).
+
+### Manual trigger
+
+From GitHub Actions: **Deploy (staging)** → choose `staging` or `prod`.
+
+---
+
+## 2. Tooling Status
 
 All tools confirmed installed and working on this machine:
 
@@ -16,7 +42,7 @@ All tools confirmed installed and working on this machine:
 
 ---
 
-## 2. What Is Already in the Repo
+## 3. What Is Already in the Repo
 
 ### `samconfig.toml`
 
@@ -80,7 +106,7 @@ export AWS_DEFAULT_REGION="$AWS_REGION"
 
 ---
 
-## 3. Remaining Steps Before First Deploy
+## 4. Remaining Steps Before First Deploy
 
 ### Step 3a — Get access via AWS SSO / IAM Identity Center ⏳ PENDING
 
@@ -154,7 +180,7 @@ Expected outputs: `EventsTableName`, `IdempotencyTableName`, `ConfigsTableName`,
 
 ---
 
-## 4. Subsequent Deployments
+## 5. Subsequent Deployments
 
 ```bash
 sam build && sam deploy

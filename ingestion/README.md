@@ -57,22 +57,22 @@ ingestion/
 ├── Cargo.toml
 └── src/
   ├── lib.rs                    ← shared library exports for binaries
-    ├── main.rs                   ← Lambda entry point (Day 4)
-    ├── model.rs                  ← all shared types, validation, error enum
+  ├── main.rs                   ← Lambda entry point (Day 4)
+  ├── model.rs                  ← all shared types, validation, error enum
   ├── bin/
   │   └── reconcile_orphaned.rs  ← re-enqueue orphaned events (Day 6.5)
-    ├── services/
-    │   ├── mod.rs
-    │   ├── dynamodb.rs           ← AppConfig::from_env() + DynamoDB client factory
-    │   ├── idempotency.rs        ← atomic conditional PutItem dedup (Day 2)
-    │   ├── events.rs             ← persist WebhookEvent to DynamoDB (Day 2)
-    │   ├── queue.rs              ← enqueue onto SQS with customer_id attribute (Day 3)
-  │   ├── reconcile.rs           ← orphaned event reconciliation helpers (Day 6.5)
-    │   └── configs.rs            ← DynamoDB CRUD for webhook_configs table (Day 4)
-    └── handlers/
-        ├── mod.rs
-        ├── webhook.rs            ← POST /webhooks/receive (Day 3)
-        └── config.rs             ← POST/GET /webhooks/configs (Day 4)
+  ├── services/
+  │   ├── mod.rs
+  │   ├── dynamodb.rs           ← AppConfig::from_env() + DynamoDB client factory
+  │   ├── idempotency.rs        ← atomic conditional PutItem dedup (Day 2)
+  │   ├── events.rs             ← persist WebhookEvent to DynamoDB (Day 2)
+  │   ├── queue.rs              ← enqueue onto SQS with customer_id attribute (Day 3)
+  │   ├── reconcile.rs          ← orphaned event reconciliation helpers (Day 6.5)
+  │   └── configs.rs            ← DynamoDB CRUD for webhook_configs table (Day 4)
+  └── handlers/
+    ├── mod.rs
+    ├── webhook.rs            ← POST /webhooks/receive (Day 3)
+    └── config.rs             ← POST/GET /webhooks/configs (Day 4)
 ```
 
 ---
@@ -600,8 +600,8 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 | Day | Topic | Goal |
 |---|---|---|
 | 6 | CloudWatch dashboards | Webhook receive rate, idempotency hit %, error rates, p95 latency | ✅ |
-| 7 | API documentation | OpenAPI spec, customer onboarding guide, Postman collection | |
-| 8 | CI/CD pipeline | GitHub Actions: test → fmt → clippy → `sam deploy` to staging on merge | |
+| 7 | API documentation | OpenAPI spec, customer onboarding guide, Postman collection | ✅ |
+| 8 | CI/CD pipeline | GitHub Actions: test → fmt → clippy → `sam deploy` to staging on merge | ✅ |
 | 9 | Load testing | k6 at 500 req/sec, < 100ms p95, < 0.1% error rate | |
 | 10 | Final polish | README, demo script, tag v1.0.0 | |
 

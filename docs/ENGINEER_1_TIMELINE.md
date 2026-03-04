@@ -216,11 +216,11 @@
 **Goal:** Automate deployment with CI/CD
 
 **Tasks:**
-- [ ] Create `.github/workflows/deploy.yml`
-- [ ] Add automated tests to CI pipeline
-- [ ] Configure AWS credentials for GitHub Actions
-- [ ] Set up staging environment
-- [ ] Create deployment runbook in `docs/deployment.md`
+- [x] Create `.github/workflows/deploy.yml`
+- [x] Add automated tests to CI pipeline
+- [x] Configure AWS credentials for GitHub Actions
+- [x] Set up staging environment
+- [x] Create deployment runbook in `docs/deployment.md`
 - [ ] Test pipeline with test commit
 - [ ] Verify auto-deployment works
 
