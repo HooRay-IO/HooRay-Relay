@@ -25,13 +25,17 @@
 
 use aws_sdk_dynamodb::Client as DynamoClient;
 use aws_sdk_dynamodb::types::AttributeValue;
-use serde_dynamo::aws_sdk_dynamodb_1::to_item;
+use serde_dynamo::aws_sdk_dynamodb_1::{from_item, to_item};
 use tracing::{debug, info};
 
 use crate::model::{IngestionError, WebhookEvent};
 
 /// 30-day TTL offset in seconds (30 × 24 × 60 × 60).
 const EVENT_TTL_SECS: i64 = 2_592_000;
+/// GSI partition key value for orphaned events that need reconciliation.
+const ORPHANED_GSI_PK: &str = "ORPHANED";
+/// GSI index name used for orphaned-event lookups.
+const ORPHANED_GSI_INDEX: &str = "gsi1-retry-index";
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -92,6 +96,90 @@ pub async fn create_event(
     Ok(())
 }
 
+/// Mark an event as orphaned so the worker can reconcile and re-enqueue it.
+///
+/// This writes the event into the GSI (`gsi1-retry-index`) using
+/// `gsi1pk = ORPHANED` and a time-ordered `gsi1sk` so that the worker can
+/// query for old orphaned events without scanning the full table.
+pub async fn mark_event_orphaned(
+    client: &DynamoClient,
+    table: &str,
+    event_id: &str,
+    created_at: i64,
+) -> Result<(), IngestionError> {
+    let pk = format!("EVENT#{event_id}");
+    let sk = WebhookEvent::metadata_sk().to_string();
+    let orphaned_sort_key = orphaned_gsi_sort_key(created_at, event_id);
+
+    client
+        .update_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S(sk))
+        .update_expression("SET gsi1pk = :gsi1pk, gsi1sk = :gsi1sk")
+        .expression_attribute_values(":gsi1pk", AttributeValue::S(ORPHANED_GSI_PK.to_string()))
+        .expression_attribute_values(":gsi1sk", AttributeValue::S(orphaned_sort_key))
+        .send()
+        .await
+        .map_err(|e| IngestionError::DynamoDb(e.to_string()))?;
+
+    Ok(())
+}
+
+/// Fetch orphaned events (persisted but not enqueued) up to a cutoff timestamp.
+pub async fn fetch_orphaned_events(
+    client: &DynamoClient,
+    table: &str,
+    cutoff_timestamp: i64,
+    limit: i32,
+) -> Result<Vec<WebhookEvent>, IngestionError> {
+    let upper_bound = orphaned_gsi_upper_bound(cutoff_timestamp);
+
+    let resp = client
+        .query()
+        .table_name(table)
+        .index_name(ORPHANED_GSI_INDEX)
+        .key_condition_expression("gsi1pk = :pk AND gsi1sk <= :sk")
+        .expression_attribute_values(":pk", AttributeValue::S(ORPHANED_GSI_PK.to_string()))
+        .expression_attribute_values(":sk", AttributeValue::S(upper_bound))
+        .limit(limit)
+        .send()
+        .await
+        .map_err(|e| IngestionError::DynamoDb(e.to_string()))?;
+
+    let mut events = Vec::new();
+    if let Some(items) = resp.items {
+        for item in items {
+            let event: WebhookEvent = from_item(item)?;
+            events.push(event);
+        }
+    }
+
+    Ok(events)
+}
+
+/// Clear the orphaned marker once the event is successfully re-enqueued.
+pub async fn clear_orphaned_marker(
+    client: &DynamoClient,
+    table: &str,
+    event_id: &str,
+) -> Result<(), IngestionError> {
+    let pk = format!("EVENT#{event_id}");
+    let sk = WebhookEvent::metadata_sk().to_string();
+
+    client
+        .update_item()
+        .table_name(table)
+        .key("pk", AttributeValue::S(pk))
+        .key("sk", AttributeValue::S(sk))
+        .update_expression("REMOVE gsi1pk, gsi1sk")
+        .send()
+        .await
+        .map_err(|e| IngestionError::DynamoDb(e.to_string()))?;
+
+    Ok(())
+}
+
 /// Serialize an arbitrary JSON payload value to a compact `String`.
 ///
 /// Used by handlers to convert the `data` field from the inbound
@@ -103,6 +191,14 @@ pub async fn create_event(
 /// practice this should never happen for a well-formed `serde_json::Value`).
 pub fn serialize_payload(data: &serde_json::Value) -> Result<String, IngestionError> {
     serde_json::to_string(data).map_err(|e| IngestionError::Serialization(e.to_string()))
+}
+
+fn orphaned_gsi_sort_key(created_at: i64, event_id: &str) -> String {
+    format!("CREATED#{:010}#EVENT#{event_id}", created_at)
+}
+
+fn orphaned_gsi_upper_bound(cutoff_timestamp: i64) -> String {
+    format!("CREATED#{:010}#EVENT#~", cutoff_timestamp)
 }
 
 // ---------------------------------------------------------------------------

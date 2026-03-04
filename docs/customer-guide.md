@@ -61,7 +61,7 @@ curl -s -X POST https://<base-url>/webhooks/receive \
   }' | jq .
 
 # 3. Check your endpoint received the delivery
-# → HooRay POSTs the `data` object to your registered URL within seconds.
+# → HooRay POSTs the `data` JSON value to your registered URL within seconds.
 ```
 
 ---
