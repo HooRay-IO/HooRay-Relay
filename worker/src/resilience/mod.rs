@@ -50,6 +50,7 @@ pub enum BreakerMode {
 
 #[derive(Debug, Clone)]
 pub struct BreakerState {
+    pub endpoint_key: String,
     pub mode: BreakerMode,
     pub consecutive_failures: u32,
     pub consecutive_successes: u32,
@@ -59,6 +60,16 @@ pub struct BreakerState {
     pub last_success_at: Option<UnixTimestamp>,
     pub half_open_in_flight: bool,
     pub version: u64,
+}
+
+impl BreakerState {
+    pub fn pk(endpoint_key: String) -> String {
+        format!("BREAKER#{}", endpoint_key)
+    }
+
+    pub fn sk() -> &'static str {
+        "STATE"
+    }
 }
 
 #[derive(Debug, Clone)]

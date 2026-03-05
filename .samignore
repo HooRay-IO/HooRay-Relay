@@ -1,0 +1,6 @@
+target/
+.git/
+.aws-sam/
+node_modules/
+**/*.log
+day6-observability-fail.log

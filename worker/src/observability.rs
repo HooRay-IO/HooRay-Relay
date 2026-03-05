@@ -111,6 +111,46 @@ impl Observability {
         self.emit_metric("webhook.queue.depth", "Count", depth as f64, &dimensions);
     }
 
+    pub fn emit_circuit_breaker_open(&self, customer_id: &str) {
+        let dimensions = self.resilience_dimensions(customer_id);
+        self.emit_metric("CircuitBreakerOpen", "Count", 1.0, &dimensions);
+    }
+
+    pub fn emit_circuit_breaker_half_open(&self, customer_id: &str) {
+        let dimensions = self.resilience_dimensions(customer_id);
+        self.emit_metric("CircuitBreakerHalfOpen", "Count", 1.0, &dimensions);
+    }
+
+    pub fn emit_circuit_breaker_close(&self, customer_id: &str) {
+        let dimensions = self.resilience_dimensions(customer_id);
+        self.emit_metric("CircuitBreakerClose", "Count", 1.0, &dimensions);
+    }
+
+    pub fn emit_retry_delay_ms(&self, customer_id: &str, retry_delay_ms: i64) {
+        let dimensions = self.resilience_dimensions(customer_id);
+        self.emit_metric(
+            "RetryDelayMs",
+            "Milliseconds",
+            retry_delay_ms as f64,
+            &dimensions,
+        );
+    }
+
+    pub fn emit_visibility_timeout_seconds(&self, customer_id: &str, visibility_timeout: i64) {
+        let dimensions = self.resilience_dimensions(customer_id);
+        self.emit_metric(
+            "VisibilityTimeoutSeconds",
+            "Seconds",
+            visibility_timeout as f64,
+            &dimensions,
+        );
+    }
+
+    pub fn emit_dlq_replay_count(&self, customer_id: &str, count: u64) {
+        let dimensions = self.resilience_dimensions(customer_id);
+        self.emit_metric("DlqReplayCount", "Count", count as f64, &dimensions);
+    }
+
     fn emit_metric(
         &self,
         metric_name: &str,
@@ -122,6 +162,14 @@ impl Observability {
             "{}",
             build_metric_payload(&self.namespace, metric_name, unit, value, dimensions,)
         );
+    }
+
+    fn resilience_dimensions(&self, customer_id: &str) -> Vec<(String, String)> {
+        vec![
+            ("environment".to_string(), self.environment.clone()),
+            ("queue_name".to_string(), self.queue_name.clone()),
+            ("customer_id".to_string(), customer_id.to_string()),
+        ]
     }
 }
 

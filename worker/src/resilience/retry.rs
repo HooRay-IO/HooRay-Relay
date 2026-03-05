@@ -97,6 +97,7 @@ mod tests {
 
     fn closed_breaker_state() -> BreakerState {
         BreakerState {
+            endpoint_key: "test-endpoint".to_string(),
             mode: BreakerMode::Closed,
             consecutive_failures: 0,
             consecutive_successes: 0,

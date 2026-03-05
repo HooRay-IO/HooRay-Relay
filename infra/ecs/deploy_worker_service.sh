@@ -21,7 +21,6 @@ require_cmd aws
 require_cmd envsubst
 
 AWS_REGION="${AWS_REGION:-}"
-AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 ECS_CLUSTER="${ECS_CLUSTER:-}"
 ECS_SERVICE="${ECS_SERVICE:-}"
 WORKER_TASK_ROLE_ARN="${WORKER_TASK_ROLE_ARN:-}"
@@ -31,11 +30,11 @@ STACK_NAME="${STACK_NAME:-hooray-dev}"
 CPU="${CPU:-256}"
 MEMORY="${MEMORY:-512}"
 CONTAINER_NAME="${CONTAINER_NAME:-worker}"
-LOG_GROUP_NAME="${LOG_GROUP_NAME:-/ecs/hooray-relay-worker}"
+TASK_FAMILY="${TASK_FAMILY:-${ECS_SERVICE:-hooray-relay-worker}}"
+LOG_GROUP_NAME="${LOG_GROUP_NAME:-/ecs/${ECS_SERVICE:-hooray-relay-worker}}"
 DESIRED_COUNT="${DESIRED_COUNT:-}"
 
 require_set AWS_REGION
-require_set AWS_ACCOUNT_ID
 require_set ECS_CLUSTER
 require_set ECS_SERVICE
 require_set WORKER_TASK_ROLE_ARN
@@ -57,8 +56,13 @@ QUEUE_URL="$(aws cloudformation describe-stacks \
   --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='QueueUrl'].OutputValue" \
   --output text)"
+BREAKER_STATES_TABLE="$(aws cloudformation describe-stacks \
+  --stack-name "$STACK_NAME" \
+  --region "$AWS_REGION" \
+  --query "Stacks[0].Outputs[?OutputKey=='BreakerStatesTableName'].OutputValue" \
+  --output text)"
 
-for resolved in EVENTS_TABLE CONFIGS_TABLE QUEUE_URL; do
+for resolved in EVENTS_TABLE CONFIGS_TABLE QUEUE_URL BREAKER_STATES_TABLE; do
   if [[ -z "${!resolved}" || "${!resolved}" == "None" ]]; then
     echo "ERROR: could not resolve ${resolved} from stack ${STACK_NAME}" >&2
     exit 1
@@ -68,9 +72,9 @@ done
 tmp_task_json="$(mktemp)"
 trap 'rm -f "$tmp_task_json"' EXIT
 
-export AWS_REGION AWS_ACCOUNT_ID CPU MEMORY CONTAINER_NAME LOG_GROUP_NAME \
+export AWS_REGION CPU MEMORY CONTAINER_NAME LOG_GROUP_NAME TASK_FAMILY \
   WORKER_TASK_ROLE_ARN WORKER_EXECUTION_ROLE_ARN WORKER_IMAGE_URI \
-  EVENTS_TABLE CONFIGS_TABLE QUEUE_URL
+  EVENTS_TABLE CONFIGS_TABLE QUEUE_URL BREAKER_STATES_TABLE
 
 envsubst < infra/ecs/task-definition.template.json > "$tmp_task_json"
 

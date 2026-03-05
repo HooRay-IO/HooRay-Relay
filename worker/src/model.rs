@@ -136,12 +136,94 @@ impl DeliveryAttempt {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DeliveryResult {
     Success,
     Retry,
     Exhausted,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeliveryErrorClass {
+    None,
+    HttpRateLimited,
+    HttpServerError,
+    HttpClientError,
+    HttpOther,
+    NetworkTimeout,
+    NetworkConnect,
+    NetworkRequest,
+    TransportOther,
+    EventMissing,
+    ConfigMissing,
+    ConfigInactive,
+    InvalidQueueMessage,
+    SerializationError,
+    DynamoDbError,
+    SqsError,
+    InternalError,
+}
+
+impl DeliveryErrorClass {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DeliveryErrorClass::None => "none",
+            DeliveryErrorClass::HttpRateLimited => "http_rate_limited",
+            DeliveryErrorClass::HttpServerError => "http_server_error",
+            DeliveryErrorClass::HttpClientError => "http_client_error",
+            DeliveryErrorClass::HttpOther => "http_other",
+            DeliveryErrorClass::NetworkTimeout => "network_timeout",
+            DeliveryErrorClass::NetworkConnect => "network_connect",
+            DeliveryErrorClass::NetworkRequest => "network_request",
+            DeliveryErrorClass::TransportOther => "transport_other",
+            DeliveryErrorClass::EventMissing => "event_missing",
+            DeliveryErrorClass::ConfigMissing => "config_missing",
+            DeliveryErrorClass::ConfigInactive => "config_inactive",
+            DeliveryErrorClass::InvalidQueueMessage => "invalid_queue_message",
+            DeliveryErrorClass::SerializationError => "serialization_error",
+            DeliveryErrorClass::DynamoDbError => "dynamodb_error",
+            DeliveryErrorClass::SqsError => "sqs_error",
+            DeliveryErrorClass::InternalError => "internal_error",
+        }
+    }
+
+    pub fn result(self) -> DeliveryResult {
+        match self {
+            DeliveryErrorClass::None => DeliveryResult::Success,
+            DeliveryErrorClass::HttpRateLimited
+            | DeliveryErrorClass::HttpServerError
+            | DeliveryErrorClass::HttpOther
+            | DeliveryErrorClass::NetworkTimeout
+            | DeliveryErrorClass::NetworkConnect
+            | DeliveryErrorClass::NetworkRequest
+            | DeliveryErrorClass::DynamoDbError
+            | DeliveryErrorClass::SqsError => DeliveryResult::Retry,
+            DeliveryErrorClass::HttpClientError
+            | DeliveryErrorClass::TransportOther
+            | DeliveryErrorClass::EventMissing
+            | DeliveryErrorClass::ConfigMissing
+            | DeliveryErrorClass::ConfigInactive
+            | DeliveryErrorClass::InvalidQueueMessage
+            | DeliveryErrorClass::SerializationError
+            | DeliveryErrorClass::InternalError => DeliveryResult::Exhausted,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeliveryClassification {
+    pub result: DeliveryResult,
+    pub class: DeliveryErrorClass,
+}
+
+impl DeliveryClassification {
+    pub fn from_class(class: DeliveryErrorClass) -> Self {
+        Self {
+            result: class.result(),
+            class,
+        }
+    }
 }
 
 #[derive(Debug, Error)]
@@ -171,6 +253,40 @@ pub enum WorkerError {
 impl From<serde_dynamo::Error> for WorkerError {
     fn from(err: serde_dynamo::Error) -> Self {
         WorkerError::DecodeDynamo(err.to_string())
+    }
+}
+
+pub fn classify_worker_error(err: &WorkerError) -> DeliveryClassification {
+    match err {
+        WorkerError::EventNotFound(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::EventMissing)
+        }
+        WorkerError::ConfigNotFound(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::ConfigMissing)
+        }
+        WorkerError::InactiveConfig(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::ConfigInactive)
+        }
+        WorkerError::InvalidMessage(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::InvalidQueueMessage)
+        }
+        WorkerError::Serialization(_) | WorkerError::DecodeDynamo(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::SerializationError)
+        }
+        WorkerError::DynamoDb(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::DynamoDbError)
+        }
+        WorkerError::Sqs(_) => DeliveryClassification::from_class(DeliveryErrorClass::SqsError),
+        WorkerError::Delivery(_) => {
+            DeliveryClassification::from_class(DeliveryErrorClass::InternalError)
+        }
+        WorkerError::ItemNotFound { entity, .. } => match *entity {
+            "Event" => DeliveryClassification::from_class(DeliveryErrorClass::EventMissing),
+            "WebhookConfig" => {
+                DeliveryClassification::from_class(DeliveryErrorClass::ConfigMissing)
+            }
+            _ => DeliveryClassification::from_class(DeliveryErrorClass::InternalError),
+        },
     }
 }
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -286,5 +402,28 @@ mod tests {
         assert_eq!(event.status, EventStatus::Delivered);
         assert_eq!(event.delivered_at, Some(1_707_840_120));
         assert_eq!(event.next_retry_at, None);
+    }
+
+    #[test]
+    fn delivery_error_class_maps_to_expected_result() {
+        assert_eq!(
+            DeliveryErrorClass::HttpServerError.result(),
+            DeliveryResult::Retry
+        );
+        assert_eq!(
+            DeliveryErrorClass::HttpClientError.result(),
+            DeliveryResult::Exhausted
+        );
+        assert_eq!(DeliveryErrorClass::None.result(), DeliveryResult::Success);
+    }
+
+    #[test]
+    fn classify_worker_error_maps_item_not_found_event() {
+        let classification = classify_worker_error(&WorkerError::ItemNotFound {
+            entity: "Event",
+            key: "evt_123".to_string(),
+        });
+        assert_eq!(classification.class, DeliveryErrorClass::EventMissing);
+        assert_eq!(classification.result, DeliveryResult::Exhausted);
     }
 }

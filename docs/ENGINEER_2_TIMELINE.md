@@ -281,30 +281,45 @@
 
 ### Day 8: Error Handling & DLQ Processing
 
-**Goal:** Robust error handling and dead letter queue management
+**Goal:** Harden resilience path (error taxonomy + breaker behavior) and operationalize DLQ handling
 
-**Tasks:**
-- [ ] Improve error classification:
-  - Network errors (timeout, connection refused)
-  - HTTP errors (4xx vs 5xx)
-  - Service errors (config not found)
-- [ ] Create DLQ processor Lambda:
-  - Alert on messages in DLQ
-  - Log DLQ message details
-  - Optional: Manual retry mechanism
-- [ ] Add manual retry API endpoint (optional)
-- [ ] Create runbook for common errors:
-  - Customer endpoint down
-  - Invalid config
-  - Network issues
-- [ ] Test error scenarios
+**Morning (9am-12pm): Error Taxonomy and Breaker State**
+- [x] Finalize error classification matrix in `worker/src/services/delivery.rs`:
+  - Retryable network/transient failures (timeout, DNS/connect reset, 5xx, 429)
+  - Non-retryable customer errors (most 4xx, invalid URL/signature expectations)
+  - Internal/service errors (missing config/event, serialization/parse failures)
+- [ ] Add deterministic mapping from error class -> worker action:
+  - `retry` (requeue with computed backoff)
+  - `fail_terminal` (mark failed, no more retries)
+  - `drop_invalid` (record attempt + diagnostic reason)
+- [ ] Implement deferred resilience hardening from Day 7:
+  - Persist circuit-breaker state (open/half-open/closed) in DynamoDB
+  - Load breaker state at worker boot and refresh during processing
+
+**Afternoon (1pm-5pm): DLQ Operations + Runbook**
+- [ ] Add DLQ processing utility/script in `scripts/`:
+  - Poll and decode DLQ messages
+  - Summarize root-cause buckets by error class
+  - Support safe replay for selected message IDs (dry-run default)
+- [x] Emit resilience metrics:
+  - `CircuitBreakerOpen`, `CircuitBreakerHalfOpen`, `CircuitBreakerClose`
+  - `RetryDelayMs`, `VisibilityTimeoutSeconds`, `DlqReplayCount`
+- [ ] Write operator docs:
+  - `docs/runbook.md`: DLQ triage and replay steps
+  - `docs/troubleshooting.md`: error-class playbook and escalation path
+- [ ] Run scenario tests:
+  - Endpoint outage (5xx/timeouts)
+  - Permanent 4xx failure
+  - Missing/disabled config
+  - Validate expected transition to DLQ and replay behavior
 
 **Deliverables:**
-- Error handling improved
-- DLQ processor created
-- Runbook complete
+- Error classification matrix implemented and validated
+- Circuit-breaker state persistence shipped
+- DLQ triage/replay workflow documented and tested
+- Resilience metrics visible in CloudWatch
 
-**Commit:** `feat: enhance error handling and add DLQ processor`
+**Commit:** `feat: harden error handling, persist breaker state, and add DLQ ops workflow`
 
 ---
 

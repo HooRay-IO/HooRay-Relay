@@ -30,6 +30,15 @@
         "dynamodb:GetItem"
       ],
       "Resource": "arn:aws:dynamodb:${AWS_REGION}:${AWS_ACCOUNT_ID}:table/webhook_configs_${ENVIRONMENT}"
+    },
+    {
+      "Sid": "DynamoBreakerStateRw",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem"
+      ],
+      "Resource": "arn:aws:dynamodb:${AWS_REGION}:${AWS_ACCOUNT_ID}:table/webhook_breaker_states_${ENVIRONMENT}"
     }
   ]
 }

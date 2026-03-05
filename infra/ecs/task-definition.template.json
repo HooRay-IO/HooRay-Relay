@@ -1,7 +1,11 @@
 {
-  "family": "hooray-relay-worker",
+  "family": "${TASK_FAMILY}",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
+  "runtimePlatform": {
+    "cpuArchitecture": "ARM64",
+    "operatingSystemFamily": "LINUX"
+  },
   "cpu": "${CPU}",
   "memory": "${MEMORY}",
   "executionRoleArn": "${WORKER_EXECUTION_ROLE_ARN}",
@@ -16,6 +20,7 @@
         { "name": "QUEUE_URL", "value": "${QUEUE_URL}" },
         { "name": "EVENTS_TABLE", "value": "${EVENTS_TABLE}" },
         { "name": "CONFIGS_TABLE", "value": "${CONFIGS_TABLE}" },
+        { "name": "BREAKER_STATES_TABLE", "value": "${BREAKER_STATES_TABLE}" },
         { "name": "RUST_LOG", "value": "info" }
       ],
       "logConfiguration": {

@@ -203,6 +203,35 @@ Resources:
           Value: engineer1
 
   # -------------------------------------------------------------------------
+  # DynamoDB Table 4: webhook_breaker_states
+  # Owned by: Engineer 2 (delivery resilience)
+  # -------------------------------------------------------------------------
+  WebhookBreakerStatesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "webhook_breaker_states_${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: hooray-relay
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Owner
+          Value: engineer2
+
+  # -------------------------------------------------------------------------
   # SQS: Dead-Letter Queue
   # Messages land here when max_receive_count is exceeded.
   # Engineer 2 owns the alarm; shared infra definition.
@@ -461,6 +490,11 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                 Resource: !GetAtt WebhookConfigsTable.Arn
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt WebhookBreakerStatesTable.Arn
       Tags:
         - Key: Project
           Value: hooray-relay
@@ -496,6 +530,8 @@ Resources:
               Value: !Ref WebhookEventsTable
             - Name: CONFIGS_TABLE
               Value: !Ref WebhookConfigsTable
+            - Name: BREAKER_STATES_TABLE
+              Value: !Ref WebhookBreakerStatesTable
             - Name: RUST_LOG
               Value: info
           LogConfiguration:
@@ -544,6 +580,12 @@ Outputs:
     Value: !Ref WebhookConfigsTable
     Export:
       Name: !Sub "hooray-relay-configs-table-${Environment}"
+
+  BreakerStatesTableName:
+    Description: "webhook_breaker_states DynamoDB table name"
+    Value: !Ref WebhookBreakerStatesTable
+    Export:
+      Name: !Sub "hooray-relay-breaker-states-table-${Environment}"
 
   QueueUrl:
     Description: "SQS delivery queue URL"
