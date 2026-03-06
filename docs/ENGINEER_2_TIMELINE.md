@@ -323,45 +323,57 @@
 
 ---
 
-### Day 9: Performance Testing
+### Day 9: Performance Testing & Capacity Tuning
 
-**Goal:** Validate worker performance under load
+**Goal:** Measure real throughput/latency under load, remove top bottlenecks, and lock in a repeatable performance baseline before handoff
 
-**Tasks:**
+**Morning (9am-12pm): Baseline Load Test + Profiling**
 - [ ] Align on shared k6 script in `tests/load_test.js` (merged with Engineer 1):
   - Supports `MODE=steady|ramping|seed` (constant-arrival, ramping VUs, or fixed-volume seeding)
   - Emits summary JSON via `SUMMARY_JSON_PATH` for easy sharing
   - Tracks accepted/duplicate/server-error rates + p95 latency
-- [ ] Load test setup (worker focus):
-  - Use `MODE=seed` + `TARGET_EVENTS=1000` to preload SQS
-  - Monitor processing rate + queue depth
-  - Track success/failure rates and retry/exhausted counts
-  - Measure end-to-end delivery latency
-- [ ] Identify bottlenecks:
-  - DynamoDB read/write latency
-  - HTTP delivery latency
-  - SQS polling delays
-- [ ] Optimize slow paths:
-  - Batch DynamoDB operations if possible
-  - Concurrent message processing
-  - Connection pooling
-- [ ] Re-run tests and verify improvements
-- [ ] Document performance characteristics:
-  - Max throughput
-  - Latency percentiles
-  - Resource usage
+- [ ] Prepare repeatable load test scenario:
+  - Seed 1,000+ events (then 5,000 stretch run) into the delivery queue
+  - Use at least two endpoint profiles: healthy 2xx and controlled failure (5xx/timeout)
+  - Confirm queue depth, worker replica count, and test window are recorded
+- [ ] Capture baseline performance from CloudWatch and logs:
+  - Throughput: events/min processed and acknowledged
+  - Latency: p50/p95/p99 end-to-end delivery time
+  - Reliability: success, retry, terminal-failure, DLQ rate
+  - Resource use: worker CPU/memory, DynamoDB consumed capacity, SQS receive/delete counts
+- [ ] Build bottleneck report from baseline:
+  - DynamoDB hot paths (event/config reads, attempt writes, status updates)
+  - HTTP path (timeout mix, connection reuse, downstream response spread)
+  - Worker internals (poll cadence, message concurrency, backoff/visibility interaction)
 
-**Target Metrics:**
-- Handle 500+ events/minute
-- < 5s p95 delivery latency
-- 99.9% delivery success rate
+**Afternoon (1pm-5pm): Targeted Optimizations + Validation**
+- [ ] Implement top-priority optimizations from baseline findings:
+  - Increase safe per-message concurrency in worker loop (bounded to avoid overload)
+  - Reduce duplicate DynamoDB calls on hot path where correctness allows
+  - Tune HTTP client reuse/pooling and timeout defaults for current traffic profile
+  - Tune SQS batch/poll settings to reduce idle gaps
+- [ ] Run post-tuning validation:
+  - Re-run identical baseline workload and compare deltas
+  - Run 30-minute soak test to check stability (no memory growth, no DLQ drift)
+  - Verify retry semantics and breaker behavior remain correct under pressure
+- [ ] Write performance summary artifacts:
+  - Before/after table for throughput, latency, error rate, resource use
+  - Final safe operating envelope and scaling guidance
+  - Known limits and follow-up items for Day 10 docs/handoff
+
+**Target Metrics (Day 9 Exit Criteria):**
+- Sustained 500+ events/min on baseline test profile
+- p95 end-to-end delivery latency < 5s during steady state
+- 99.9% success rate for valid endpoints (excluding intentional failure scenarios)
+- No unexpected DLQ growth during healthy-endpoint load
 
 **Deliverables:**
-- Load tests complete
-- Bottlenecks identified and fixed
-- Performance documented
+- Repeatable load test procedure and dataset definition
+- Baseline + post-optimization benchmark results
+- Worker tuning changes validated in code and runtime metrics
+- Performance findings documented for handoff
 
-**Commit:** `perf: optimize worker for high-volume delivery`
+**Commit:** `perf: baseline, tune, and validate worker throughput under load`
 
 ---
 
