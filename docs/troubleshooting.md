@@ -5,7 +5,7 @@
 This guide covers delivery-worker failures, DLQ triage, and escalation for webhook delivery incidents.
 
 Primary operational workflow:
-- Use [runbook.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/runbook.md) for DLQ inspect/replay commands.
+- Use [runbook.md](./runbook.md) for DLQ inspect/replay commands.
 - Use this document to classify issues and decide corrective action.
 
 ## Quick Triage
