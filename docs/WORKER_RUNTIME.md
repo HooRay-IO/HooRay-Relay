@@ -158,6 +158,10 @@ Expected values:
   - task count remains at desired
   - no frequent task restarts
 
+## DLQ Operations
+
+For DLQ triage and replay workflow, see `docs/runbook.md`.
+
 ## Future Migration Note
 
 If moving to SQS-triggered Lambda later, refactor worker from infinite loop to per-batch/per-message Lambda handler first. Keep this runtime until that refactor is complete.

@@ -288,26 +288,26 @@
   - Retryable network/transient failures (timeout, DNS/connect reset, 5xx, 429)
   - Non-retryable customer errors (most 4xx, invalid URL/signature expectations)
   - Internal/service errors (missing config/event, serialization/parse failures)
-- [ ] Add deterministic mapping from error class -> worker action:
+- [x] Add deterministic mapping from error class -> worker action:
   - `retry` (requeue with computed backoff)
   - `fail_terminal` (mark failed, no more retries)
   - `drop_invalid` (record attempt + diagnostic reason)
-- [ ] Implement deferred resilience hardening from Day 7:
+- [x] Implement deferred resilience hardening from Day 7:
   - Persist circuit-breaker state (open/half-open/closed) in DynamoDB
   - Load breaker state at worker boot and refresh during processing
 
 **Afternoon (1pm-5pm): DLQ Operations + Runbook**
-- [ ] Add DLQ processing utility/script in `scripts/`:
+- [x] Add DLQ processing utility/script in `scripts/`:
   - Poll and decode DLQ messages
   - Summarize root-cause buckets by error class
   - Support safe replay for selected message IDs (dry-run default)
 - [x] Emit resilience metrics:
   - `CircuitBreakerOpen`, `CircuitBreakerHalfOpen`, `CircuitBreakerClose`
   - `RetryDelayMs`, `VisibilityTimeoutSeconds`, `DlqReplayCount`
-- [ ] Write operator docs:
+- [x] Write operator docs:
   - `docs/runbook.md`: DLQ triage and replay steps
   - `docs/troubleshooting.md`: error-class playbook and escalation path
-- [ ] Run scenario tests:
+- [x] Run scenario tests:
   - Endpoint outage (5xx/timeouts)
   - Permanent 4xx failure
   - Missing/disabled config
@@ -441,8 +441,8 @@ By end of sprint, you should have:
 - [x] `worker/tests/end_to_end_test.sh` - Contract integration helper
 - [x] `scripts/e2e_ingestion_worker.sh` - Full ingestion->worker e2e
 - [x] `tests/test_dynamodb.sh` - DynamoDB tests
-- [ ] `docs/runbook.md` - Operational guide
-- [ ] `docs/troubleshooting.md` - Common issues
+- [x] `docs/runbook.md` - Operational guide
+- [x] `docs/troubleshooting.md` - Common issues
 - [ ] `README.md` - Worker overview
 
 ---
