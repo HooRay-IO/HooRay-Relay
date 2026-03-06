@@ -2,6 +2,7 @@ export AWS_PROFILE="your-aws-profile"
 export AWS_REGION="us-west-2"
 export AWS_DEFAULT_REGION="$AWS_REGION"
 export STACK_NAME="your-stack-name"
+export DELIVERY_URL="https://httpbin.org/post"
 export SKIP_DELIVERY=true
 export ECR_REPO="hooray-relay-worker-dev"
 
@@ -28,6 +29,8 @@ export INGESTION_API_URL=$(aws cloudformation describe-stacks \
   --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='IngestionApiUrl'].OutputValue" \
   --output text)
+export API_URL="${INGESTION_API_URL%/}"
+export CUSTOMER_ID="cust_load_test"
 
 # Backward-compatible aliases for older scripts
 export WEBHOOK_EVENTS_TABLE="$EVENTS_TABLE"

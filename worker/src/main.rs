@@ -722,4 +722,12 @@ mod tests {
         assert_eq!(deleted.len(), 1);
         assert_eq!(deleted[0], "rh-4");
     }
+
+    #[test]
+    fn config_not_found_is_terminal_not_retry() {
+        let action = Worker::policy_for_worker_error(&WorkerError::ConfigNotFound(
+            "cust_missing".to_string(),
+        ));
+        assert_eq!(action, DeliveryPolicyAction::FailTerminal);
+    }
 }
