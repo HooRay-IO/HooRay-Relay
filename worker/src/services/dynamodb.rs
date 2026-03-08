@@ -115,6 +115,49 @@ fn parse_status_attr(attr: &AttributeValue) -> Result<EventStatus, WorkerError> 
     }
 }
 
+struct StatusUpdateSpec {
+    update_expression: String,
+    status_value: String,
+    next_retry_at: Option<i64>,
+    delivered_at: Option<i64>,
+}
+
+fn build_status_update_spec(event: &Event) -> StatusUpdateSpec {
+    let status_value = match event.status {
+        EventStatus::Pending => "pending".to_string(),
+        EventStatus::Delivered => "delivered".to_string(),
+        EventStatus::Failed => "failed".to_string(),
+    };
+
+    // Delivery terminal state takes precedence: persist delivered_at and clear retry schedule.
+    if let Some(delivered_at) = event.delivered_at {
+        return StatusUpdateSpec {
+            update_expression:
+                "SET #status = :status, delivered_at = :delivered_at REMOVE next_retry_at"
+                    .to_string(),
+            status_value,
+            next_retry_at: None,
+            delivered_at: Some(delivered_at),
+        };
+    }
+
+    if let Some(next_retry_at) = event.next_retry_at {
+        return StatusUpdateSpec {
+            update_expression: "SET #status = :status, next_retry_at = :next_retry_at".to_string(),
+            status_value,
+            next_retry_at: Some(next_retry_at),
+            delivered_at: None,
+        };
+    }
+
+    StatusUpdateSpec {
+        update_expression: "SET #status = :status REMOVE next_retry_at".to_string(),
+        status_value,
+        next_retry_at: None,
+        delivered_at: None,
+    }
+}
+
 pub struct DynamoDbService {
     client: Client,
     webhook_events_table: String,
@@ -246,7 +289,7 @@ impl DynamoDbService {
     /// Updates the status of an event in DynamoDB after a delivery attempt.
     #[instrument(skip(self, event), fields(event_id = %event.event_id))]
     pub async fn update_event_status(&self, event: &Event) -> Result<(), WorkerError> {
-        // Implementation would involve updating the event item with the new status and next retry time if needed
+        let spec = build_status_update_spec(event);
         let pk = event.pk();
         let sk = Event::metadata_sk().to_string();
         let mut request = self
@@ -255,29 +298,22 @@ impl DynamoDbService {
             .table_name(&self.webhook_events_table)
             .key("pk", AttributeValue::S(pk))
             .key("sk", AttributeValue::S(sk))
-            .update_expression("SET #status = :status")
+            .update_expression(spec.update_expression)
             .expression_attribute_names("#status", "status")
-            .expression_attribute_values(
-                ":status",
-                AttributeValue::S(
-                    match event.status {
-                        EventStatus::Pending => "pending",
-                        EventStatus::Delivered => "delivered",
-                        EventStatus::Failed => "failed",
-                    }
-                    .to_string(),
-                ),
-            );
+            .expression_attribute_values(":status", AttributeValue::S(spec.status_value));
 
-        if let Some(next_retry_at) = event.next_retry_at {
-            request = request
-                .update_expression("SET #status = :status, next_retry_at = :next_retry_at")
-                .expression_attribute_values(
-                    ":next_retry_at",
-                    AttributeValue::N(next_retry_at.to_string()),
-                );
-        } else {
-            request = request.update_expression("SET #status = :status REMOVE next_retry_at");
+        if let Some(next_retry_at) = spec.next_retry_at {
+            request = request.expression_attribute_values(
+                ":next_retry_at",
+                AttributeValue::N(next_retry_at.to_string()),
+            );
+        }
+
+        if let Some(delivered_at) = spec.delivered_at {
+            request = request.expression_attribute_values(
+                ":delivered_at",
+                AttributeValue::N(delivered_at.to_string()),
+            );
         }
 
         request.send().await.map_err(|e| {
@@ -571,6 +607,63 @@ mod tests {
         assert_eq!(event.event_id, "evt_nulls");
         assert_eq!(event.delivered_at, None);
         assert_eq!(event.next_retry_at, None);
+    }
+
+    #[test]
+    fn status_update_spec_sets_delivered_at_for_delivered_events() {
+        let mut event = Event::new(
+            "evt_delivered".to_string(),
+            "cust_delivered".to_string(),
+            "{}".to_string(),
+            1_707_840_000,
+        );
+        event.mark_delivered(1_707_840_120);
+
+        let spec = build_status_update_spec(&event);
+        assert_eq!(
+            spec.update_expression,
+            "SET #status = :status, delivered_at = :delivered_at REMOVE next_retry_at"
+        );
+        assert_eq!(spec.status_value, "delivered");
+        assert_eq!(spec.delivered_at, Some(1_707_840_120));
+        assert_eq!(spec.next_retry_at, None);
+    }
+
+    #[test]
+    fn status_update_spec_keeps_delivered_at_absent_on_retry_updates() {
+        let mut event = Event::new(
+            "evt_retry".to_string(),
+            "cust_retry".to_string(),
+            "{}".to_string(),
+            1_707_840_000,
+        );
+        event.mark_retry_scheduled(1_707_840_060);
+
+        let spec = build_status_update_spec(&event);
+        assert_eq!(
+            spec.update_expression,
+            "SET #status = :status, next_retry_at = :next_retry_at"
+        );
+        assert_eq!(spec.status_value, "pending");
+        assert_eq!(spec.next_retry_at, Some(1_707_840_060));
+        assert_eq!(spec.delivered_at, None);
+    }
+
+    #[test]
+    fn status_update_spec_preserves_delivered_timestamp_on_duplicate_terminal_path() {
+        let mut event = Event::new(
+            "evt_terminal".to_string(),
+            "cust_terminal".to_string(),
+            "{}".to_string(),
+            1_707_840_000,
+        );
+        event.mark_delivered(1_707_840_120);
+
+        // Duplicate/terminal processing should not null out delivered_at.
+        let spec = build_status_update_spec(&event);
+        assert_eq!(spec.status_value, "delivered");
+        assert_eq!(spec.delivered_at, Some(1_707_840_120));
+        assert_eq!(spec.next_retry_at, None);
     }
 
     struct CleanupItem {
