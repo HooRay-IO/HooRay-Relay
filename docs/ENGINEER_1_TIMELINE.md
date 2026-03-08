@@ -238,7 +238,7 @@
 **Goal:** Validate performance under load
 
 **Tasks:**
-- [ ] Create k6 load test script in `tests/load_test.js`
+- [x] Create k6 load test script in `tests/load_test.js`
 - [ ] Run load test targeting 500 req/sec
 - [ ] Monitor CloudWatch metrics during test
 - [ ] Identify bottlenecks
