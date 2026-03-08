@@ -51,3 +51,35 @@ flowchart TD
     Y --> Z[Delete message]
     Z --> A
 ```
+
+## Load Testing (k6)
+
+The shared load test script lives in `tests/load_test.js` and supports multiple
+profiles:
+
+- `MODE=steady` for constant-arrival-rate tests (default)
+- `MODE=ramping` for ramp-up/ramp-down VU stages
+- `MODE=seed` + `TARGET_EVENTS=...` for fixed-volume seeding
+
+Key environment variables:
+
+- `API_URL` (or `BASE_URL`) — ingestion API base URL
+- `API_KEY` — API Gateway key (if required)
+- `CUSTOMER_ID` — test customer ID
+- `SUMMARY_JSON_PATH` — optional JSON summary output path
+
+Example runs:
+
+```bash
+# Constant-arrival test at 500 req/sec for 2 minutes
+API_URL="https://<api-id>.execute-api.<region>.amazonaws.com/Prod" \
+MODE=steady RATE=500 DURATION=2m \
+SUMMARY_JSON_PATH="tests/loadtest-summary.json" \
+k6 run tests/load_test.js
+
+# Fixed-volume seed run (useful for worker-side throughput checks)
+API_URL="https://<api-id>.execute-api.<region>.amazonaws.com/Prod" \
+MODE=seed TARGET_EVENTS=1000 ITERATION_VUS=50 \
+SUMMARY_JSON_PATH="tests/loadtest-summary.json" \
+k6 run tests/load_test.js
+```

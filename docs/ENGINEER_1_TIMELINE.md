@@ -238,9 +238,10 @@
 **Goal:** Validate performance under load
 
 **Tasks:**
-- [x] Create k6 load test script in `tests/load_test.js`
-- [ ] Run load test targeting 500 req/sec
-- [ ] Monitor CloudWatch metrics during test
+- [x] Create shared k6 load test script in `tests/load_test.js` (merged with Engineer 2)
+- [ ] Run load test targeting 500 req/sec (`MODE=steady`) or ramping VUs (`MODE=ramping`)
+- [ ] Capture structured summary output (`SUMMARY_JSON_PATH=...`) and share results
+- [ ] Monitor CloudWatch metrics during test (ingestion latency + accept/duplicate rates)
 - [ ] Identify bottlenecks
 - [ ] Optimize slow code paths
 - [ ] Add caching if beneficial
