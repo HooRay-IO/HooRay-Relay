@@ -35,8 +35,23 @@ META_PATH="${META_PATH:-${OUT_DIR}/meta.env}"
 
 mkdir -p "$OUT_DIR"
 
-# Load env via direnv and persist run metadata.
-direnv exec . bash -lc 'env | sort' > "${OUT_DIR}/env.snapshot" || true
+# Persist a redacted environment snapshot for reproducibility (avoid secrets/tokens).
+cat > "${OUT_DIR}/env.snapshot" <<ENV_SNAPSHOT
+TEST_RUN_ID=$TEST_RUN_ID
+CUSTOMER_ID=$CUSTOMER_ID
+TARGET_EVENTS=$TARGET_EVENTS
+ITERATION_VUS=$ITERATION_VUS
+ENDPOINT_PROFILE=$ENDPOINT_PROFILE
+OUT_DIR=$OUT_DIR
+SUMMARY_JSON_PATH=$SUMMARY_JSON_PATH
+AWS_PROFILE=
+AWS_REGION=
+STACK_NAME=
+API_URL=
+ENV_SNAPSHOT
+
+# Fill non-sensitive runtime values from direnv context.
+direnv exec . bash -lc 'printf "AWS_PROFILE=%s\nAWS_REGION=%s\nSTACK_NAME=%s\nAPI_URL=%s\n" "${AWS_PROFILE:-}" "${AWS_REGION:-}" "${STACK_NAME:-}" "${API_URL:-}"' >> "${OUT_DIR}/env.snapshot" || true
 
 cat > "$META_PATH" <<META
 TEST_RUN_ID=$TEST_RUN_ID

@@ -34,6 +34,9 @@ coverage/
 *.profraw
 *.profdata
 
+# Generated performance/load-test artifacts (may contain environment snapshots)
+artifacts/
+
 # Lambda/SAM local artifacts
 .aws-sam/
 
