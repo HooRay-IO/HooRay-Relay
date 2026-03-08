@@ -1,0 +1,21 @@
+{
+  "meta": {
+    "generated_at": "2026-03-07T09:02:35.248Z",
+    "api_url": "https://4mg8qnj5og.execute-api.us-west-2.amazonaws.com/Prod",
+    "customer_id": "cust_load_test_day9_baseline_1772874137",
+    "test_run_id": "day9_baseline_20260307_010222",
+    "endpoint_profile": "healthy",
+    "target_events": 1000,
+    "iteration_vus": 50
+  },
+  "metrics": {
+    "accepted_rate": 0.179,
+    "duplicate_rate": 0,
+    "server_error_rate": 0.821,
+    "http_req_failed_rate": 0.821,
+    "http_req_duration_p95_ms": 110.9462,
+    "iterations": 1000,
+    "status_accepted": 179,
+    "status_duplicate": null
+  }
+}
