@@ -160,6 +160,15 @@ jobs:
       - name: Build SAM app
         run: sam build --parallel
 
+      - name: Write CI SAM config
+        if: steps.mode.outputs.deploy_mode != 'build_only'
+        run: |
+          cat > /tmp/samconfig-ci.toml <<'EOF'
+          version = 0.1
+          [default.deploy.parameters]
+          confirm_changeset = false
+          EOF
+
       - name: Note fork PR deploy skip
         if: steps.mode.outputs.deploy_mode == 'build_only'
         run: |
@@ -174,6 +183,7 @@ jobs:
           set -euo pipefail
           common_args=(
             --resolve-s3
+            --config-file /tmp/samconfig-ci.toml
             --no-confirm-changeset
             --no-fail-on-empty-changeset
             --stack-name "${{ steps.mode.outputs.stack_name }}"
