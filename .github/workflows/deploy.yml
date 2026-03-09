@@ -41,7 +41,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve trust mode
+        id: trust
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "is_fork_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Configure AWS credentials
+        if: steps.trust.outputs.is_fork_pr != 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
@@ -69,17 +80,22 @@ jobs:
           version: 0.11.0
 
       - name: Setup Docker Buildx
+        if: steps.trust.outputs.is_fork_pr != 'true'
         uses: docker/setup-buildx-action@v3
 
       - name: Login to Amazon ECR
         id: ecr
+        if: steps.trust.outputs.is_fork_pr != 'true'
         uses: aws-actions/amazon-ecr-login@v2
 
       - name: Resolve deploy mode
         id: mode
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+          if [[ "${{ steps.trust.outputs.is_fork_pr }}" == "true" ]]; then
+            echo "deploy_mode=build_only" >> "$GITHUB_OUTPUT"
+            echo "stack_name=" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             echo "deploy_mode=validate" >> "$GITHUB_OUTPUT"
             echo "stack_name=${VALIDATION_STACK_NAME}" >> "$GITHUB_OUTPUT"
           else
@@ -116,6 +132,7 @@ jobs:
 
       - name: Resolve worker image for deploy step
         id: worker-image-ref
+        if: steps.mode.outputs.deploy_mode != 'build_only'
         run: |
           set -euo pipefail
           if [[ "${{ steps.mode.outputs.deploy_mode }}" == "deploy" ]]; then
@@ -125,6 +142,7 @@ jobs:
           fi
 
       - name: Validate deploy inputs
+        if: steps.mode.outputs.deploy_mode != 'build_only'
         run: |
           set -euo pipefail
           if [[ -z "${ECS_SUBNET_IDS}" ]]; then
@@ -142,7 +160,14 @@ jobs:
       - name: Build SAM app
         run: sam build --parallel
 
+      - name: Note fork PR deploy skip
+        if: steps.mode.outputs.deploy_mode == 'build_only'
+        run: |
+          echo "Fork PR detected; AWS-authenticated validation and deploy steps were skipped."
+          echo "This run validated checkout, toolchain setup, sam validate, and sam build only."
+
       - name: Deploy stack
+        if: steps.mode.outputs.deploy_mode != 'build_only'
         env:
           WORKER_IMAGE_URI: ${{ steps.worker-image-ref.outputs.image_uri }}
         run: |
