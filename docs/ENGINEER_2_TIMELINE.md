@@ -328,11 +328,15 @@
 **Goal:** Validate worker performance under load
 
 **Tasks:**
-- [ ] Load test setup:
-  - Generate 1000 events in SQS
-  - Monitor processing rate
-  - Track success/failure rates
-  - Measure end-to-end latency
+- [ ] Align on shared k6 script in `tests/load_test.js` (merged with Engineer 1):
+  - Supports `MODE=steady|ramping|seed` (constant-arrival, ramping VUs, or fixed-volume seeding)
+  - Emits summary JSON via `SUMMARY_JSON_PATH` for easy sharing
+  - Tracks accepted/duplicate/server-error rates + p95 latency
+- [ ] Load test setup (worker focus):
+  - Use `MODE=seed` + `TARGET_EVENTS=1000` to preload SQS
+  - Monitor processing rate + queue depth
+  - Track success/failure rates and retry/exhausted counts
+  - Measure end-to-end delivery latency
 - [ ] Identify bottlenecks:
   - DynamoDB read/write latency
   - HTTP delivery latency

@@ -23,6 +23,7 @@
 12. [Roadmap — Week 2](#12-roadmap--week-2)
 13. [Day 6 — CloudWatch Observability](#13-day-6--cloudwatch-observability)
 14. [Reliability Fix — Orphaned Event Reconciliation](#14-reliability-fix--orphaned-event-reconciliation)
+15. [Day 9 — Load Testing (In Progress)](#15-day-9--load-testing-in-progress)
 
 ---
 
@@ -600,9 +601,9 @@ cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
 | Day | Topic | Goal |
 |---|---|---|
 | 6 | CloudWatch dashboards | Webhook receive rate, idempotency hit %, error rates, p95 latency | ✅ |
-| 7 | API documentation | OpenAPI spec, customer onboarding guide, Postman collection | |
-| 8 | CI/CD pipeline | GitHub Actions: test → fmt → clippy → `sam deploy` to staging on merge | |
-| 9 | Load testing | k6 at 500 req/sec, < 100ms p95, < 0.1% error rate | |
+| 7 | API documentation | OpenAPI spec, customer onboarding guide, Postman collection | ✅ |
+| 8 | CI/CD pipeline | GitHub Actions: test → fmt → clippy → `sam deploy` to staging on merge | ✅ |
+| 9 | Load testing | k6 at 500 req/sec, < 100ms p95, < 0.1% error rate | ⏳ |
 | 10 | Final polish | README, demo script, tag v1.0.0 | |
 
 ### Known technical debt
@@ -787,6 +788,34 @@ cargo run -p ingestion --bin reconcile_orphaned
 
 The runner re-enqueues only **pending** events with `attempt_count == 0`, and
 clears the orphaned marker after a successful re-queue.
+
+---
+
+## 15. Day 9 — Load Testing (In Progress)
+
+### Goal
+
+Validate 500 req/sec sustained throughput with <$100ms p95 latency and
+<0.1% error rate.
+
+### Load test script
+
+`tests/load_test.js` is a k6 script that targets `POST /webhooks/receive` with a
+constant-arrival-rate scenario and configurable parameters.
+
+### How to run
+
+```
+BASE_URL="https://<api-id>.execute-api.us-west-2.amazonaws.com/Prod" \
+API_KEY="apk_your_key" \
+CUSTOMER_ID="cust_loadtest" \
+SETUP_CREATE_CONFIG=true \
+k6 run tests/load_test.js
+```
+
+Use `RATE`, `DURATION`, `PRE_ALLOCATED_VUS`, and `MAX_VUS` env vars to tune load.
+Results are pending until the full run is executed and CloudWatch metrics are
+captured.
 
 `start` is a `std::time::Instant` captured at handler entry — no async overhead,
 no extra allocations on the hot path.
