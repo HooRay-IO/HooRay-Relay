@@ -382,21 +382,21 @@
 **Goal:** Complete documentation and prepare for production
 
 **Tasks:**
-- [ ] Write operational runbook:
+- [x] Write operational runbook:
   - How to check worker health
   - How to investigate failures
   - How to manually retry events
   - How to update configs
-- [ ] Create troubleshooting guide:
+- [x] Create troubleshooting guide:
   - Worker not processing messages
   - High failure rates
   - SQS queue backing up
   - DLQ messages appearing
-- [ ] Document retry behavior:
+- [x] Document retry behavior:
   - Retry schedule
   - Max attempts
   - Backoff strategy
-- [ ] Prepare demo:
+- [x] Prepare demo:
   - Show end-to-end flow
   - Demonstrate retry logic
   - Show monitoring dashboards
@@ -449,7 +449,7 @@ By end of Week 2, verify:
 
 By end of sprint, you should have:
 - [x] `src/main.rs` - Worker main loop
-- [ ] `src/models.rs` - Data structures
+- [x] `worker/src/model.rs` - Data structures
 - [x] `src/services/dynamodb.rs` - DynamoDB operations
 - [x] `src/services/delivery.rs` - HTTP delivery
 - [x] `src/services/signature.rs` - HMAC generation
@@ -458,7 +458,9 @@ By end of sprint, you should have:
 - [x] `scripts/e2e_ingestion_worker.sh` - Full ingestion->worker e2e
 - [x] `tests/test_dynamodb.sh` - DynamoDB tests
 - [x] `docs/runbook.md` - Operational guide
-- [x] `docs/troubleshooting.md` - Common issues
+- [x] `docs/troubleshooting.md` - Troubleshooting guide
+- [x] `docs/retry-behavior.md` - Retry behavior reference
+- [x] `docs/demo-day10.md` - Demo script
 - [ ] `README.md` - Worker overview
 
 ---
