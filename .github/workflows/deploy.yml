@@ -1,0 +1,200 @@
+---
+name: Deploy
+
+"on":
+  push:
+    branches: ["main", "deployment-test"]
+  pull_request:
+    branches: ["deployment-test"]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  STACK_NAME: ${{ vars.SAM_STACK_NAME || 'hooray-dev' }}
+  VALIDATION_STACK_NAME: ${{ vars.SAM_VALIDATION_STACK_NAME || vars.SAM_STACK_NAME || 'hooray-dev' }}
+  DEPLOY_ENVIRONMENT: ${{ vars.DEPLOY_ENVIRONMENT || 'dev' }}
+  ENABLE_ECS_WORKER: ${{ vars.ENABLE_ECS_WORKER || 'true' }}
+  WORKER_DESIRED_COUNT: ${{ vars.WORKER_DESIRED_COUNT || '1' }}
+  WORKER_CPU: ${{ vars.WORKER_CPU || '256' }}
+  WORKER_MEMORY: ${{ vars.WORKER_MEMORY || '512' }}
+  WORKER_ASSIGN_PUBLIC_IP: ${{ vars.WORKER_ASSIGN_PUBLIC_IP || 'ENABLED' }}
+  SQS_VISIBILITY_TIMEOUT_SECONDS: ${{ vars.SQS_VISIBILITY_TIMEOUT_SECONDS || '60' }}
+  SQS_MAX_RECEIVE_COUNT: ${{ vars.SQS_MAX_RECEIVE_COUNT || '4' }}
+  WORKER_ECR_REPOSITORY: ${{ vars.WORKER_ECR_REPOSITORY || 'hooray-relay-worker-dev' }}
+  ECS_SUBNET_IDS: ${{ vars.ECS_SUBNET_IDS }}
+  ECS_SECURITY_GROUP_IDS: ${{ vars.ECS_SECURITY_GROUP_IDS }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ vars.GITHUB_ENVIRONMENT || 'dev' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve trust mode
+        id: trust
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "pull_request" && "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]]; then
+            echo "is_fork_pr=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_fork_pr=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure AWS credentials
+        if: steps.trust.outputs.is_fork_pr != 'true'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Rust deps
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hooray-relay-rust
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+
+      - name: Install Cargo Lambda
+        run: cargo install cargo-lambda --version 1.3.0 --locked
+
+      - name: Install Zig
+        uses: mlugg/setup-zig@v1
+        with:
+          version: 0.11.0
+
+      - name: Setup Docker Buildx
+        if: steps.trust.outputs.is_fork_pr != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Amazon ECR
+        id: ecr
+        if: steps.trust.outputs.is_fork_pr != 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Resolve deploy mode
+        id: mode
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.trust.outputs.is_fork_pr }}" == "true" ]]; then
+            echo "deploy_mode=build_only" >> "$GITHUB_OUTPUT"
+            echo "stack_name=" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "deploy_mode=validate" >> "$GITHUB_OUTPUT"
+            echo "stack_name=${VALIDATION_STACK_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy_mode=deploy" >> "$GITHUB_OUTPUT"
+            echo "stack_name=${STACK_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push worker image
+        id: worker-image
+        if: steps.mode.outputs.deploy_mode == 'deploy'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${IMAGE_TAG}"
+          docker buildx build \
+            --platform linux/arm64 \
+            --file worker/Dockerfile \
+            --tag "${IMAGE_URI}" \
+            --push \
+            .
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve validation worker image
+        id: validation-image
+        if: steps.mode.outputs.deploy_mode == 'validate'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        run: |
+          set -euo pipefail
+          IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:dev-latest"
+          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve worker image for deploy step
+        id: worker-image-ref
+        if: steps.mode.outputs.deploy_mode != 'build_only'
+        run: |
+          set -euo pipefail
+          if [[ "${{ steps.mode.outputs.deploy_mode }}" == "deploy" ]]; then
+            echo "image_uri=${{ steps.worker-image.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "image_uri=${{ steps.validation-image.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Validate deploy inputs
+        if: steps.mode.outputs.deploy_mode != 'build_only'
+        run: |
+          set -euo pipefail
+          if [[ -z "${ECS_SUBNET_IDS}" ]]; then
+            echo "ECS_SUBNET_IDS repo variable must be set for CI deploys." >&2
+            exit 1
+          fi
+          if [[ -z "${ECS_SECURITY_GROUP_IDS}" ]]; then
+            echo "ECS_SECURITY_GROUP_IDS repo variable must be set for CI deploys." >&2
+            exit 1
+          fi
+
+      - name: Validate SAM template
+        run: sam validate --lint
+
+      - name: Build SAM app
+        run: sam build --parallel
+
+      - name: Note fork PR deploy skip
+        if: steps.mode.outputs.deploy_mode == 'build_only'
+        run: |
+          echo "Fork PR detected; AWS-authenticated validation and deploy steps were skipped."
+          echo "This run validated checkout, toolchain setup, sam validate, and sam build only."
+
+      - name: Deploy stack
+        if: steps.mode.outputs.deploy_mode != 'build_only'
+        env:
+          WORKER_IMAGE_URI: ${{ steps.worker-image-ref.outputs.image_uri }}
+        run: |
+          set -euo pipefail
+          common_args=(
+            --resolve-s3
+            --no-confirm-changeset
+            --no-fail-on-empty-changeset
+            --stack-name "${{ steps.mode.outputs.stack_name }}"
+            --region "${AWS_REGION}"
+            --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM
+            --parameter-overrides
+            Environment="${DEPLOY_ENVIRONMENT}"
+            SqsVisibilityTimeoutSeconds="${SQS_VISIBILITY_TIMEOUT_SECONDS}"
+            SqsMaxReceiveCount="${SQS_MAX_RECEIVE_COUNT}"
+            EnableEcsWorker="${ENABLE_ECS_WORKER}"
+            WorkerImageUri="${WORKER_IMAGE_URI}"
+            WorkerDesiredCount="${WORKER_DESIRED_COUNT}"
+            WorkerCpu="${WORKER_CPU}"
+            WorkerMemory="${WORKER_MEMORY}"
+            WorkerAssignPublicIp="${WORKER_ASSIGN_PUBLIC_IP}"
+            EcsSubnetIds="${ECS_SUBNET_IDS}"
+            EcsSecurityGroupIds="${ECS_SECURITY_GROUP_IDS}"
+          )
+
+          if [[ "${{ steps.mode.outputs.deploy_mode }}" == "validate" ]]; then
+            sam deploy --no-execute-changeset "${common_args[@]}"
+          else
+            sam deploy "${common_args[@]}"
+          fi
