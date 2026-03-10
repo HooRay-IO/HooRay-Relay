@@ -280,6 +280,17 @@ impl DynamoDbService {
             request = request.update_expression("SET #status = :status REMOVE next_retry_at");
         }
 
+        if let Some(delivered_at) = event.delivered_at {
+            request = request
+                .update_expression(
+                    "SET #status = :status, delivered_at = :delivered_at REMOVE next_retry_at",
+                )
+                .expression_attribute_values(
+                    ":delivered_at",
+                    AttributeValue::N(delivered_at.to_string()),
+                );
+        }
+
         request.send().await.map_err(|e| {
             error!(error = %e, "failed to update event status");
             WorkerError::DynamoDb(format!(

@@ -1,0 +1,54 @@
+---
+name: Worker Image PR
+
+"on":
+  pull_request:
+    paths:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/worker-image-pr.yml"
+      - ".dockerignore"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "worker/**"
+      - "ingestion/**"
+
+concurrency:
+  group: worker-image-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-worker-image:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust deps
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hooray-relay-rust
+
+      - name: Build worker binary
+        run: cargo build --locked --release -p worker --bin worker
+
+      - name: Verify worker binary
+        run: test -x target/release/worker
+
+      - name: Build worker image
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/worker-image/target/release
+          cp target/release/worker /tmp/worker-image/target/release/worker
+          cp worker/Dockerfile.packaging /tmp/worker-image/Dockerfile
+          docker build \
+            --file /tmp/worker-image/Dockerfile \
+            --tag hooray-relay-worker:pr \
+            /tmp/worker-image

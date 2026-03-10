@@ -83,3 +83,13 @@ MODE=seed TARGET_EVENTS=1000 ITERATION_VUS=50 \
 SUMMARY_JSON_PATH="tests/loadtest-summary.json" \
 k6 run tests/load_test.js
 ```
+
+For Day 9 artifact generation, prefer the committed wrapper:
+
+```bash
+API_URL="https://<api-id>.execute-api.<region>.amazonaws.com/Prod" \
+TARGET_EVENTS=1000 ITERATION_VUS=50 \
+bash scripts/day9_seed_and_report.sh
+```
+
+This writes `meta.env`, `k6-summary.json`, and a sanitized `env.snapshot` under `artifacts/day9/<test_run_id>/`.
