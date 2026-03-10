@@ -5,6 +5,8 @@ FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
 COPY ingestion/Cargo.toml ingestion/Cargo.toml
 COPY worker/Cargo.toml worker/Cargo.toml
+COPY ingestion/src ingestion/src
+COPY worker/src worker/src
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder

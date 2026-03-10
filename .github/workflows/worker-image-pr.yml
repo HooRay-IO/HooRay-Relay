@@ -1,0 +1,41 @@
+---
+name: Worker Image PR
+
+"on":
+  pull_request:
+    paths:
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/worker-image-pr.yml"
+      - ".dockerignore"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "worker/**"
+      - "ingestion/**"
+
+concurrency:
+  group: worker-image-pr-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-worker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build worker image
+        run: |
+          set -euo pipefail
+          docker buildx build \
+            --platform linux/amd64 \
+            --file worker/Dockerfile \
+            --cache-from type=gha,scope=worker-image-pr \
+            --cache-to type=gha,mode=max,scope=worker-image-pr \
+            --progress plain \
+            .
