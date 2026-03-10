@@ -112,14 +112,15 @@ jobs:
         run: |
           set -euo pipefail
           SHA_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${IMAGE_TAG}"
-          LATEST_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:dev-latest"
+          LATEST_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${DEPLOY_ENVIRONMENT}-latest"
+          CACHE_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:cache"
           docker buildx build \
-            --platform linux/arm64 \
+            --platform linux/amd64 \
             --file worker/Dockerfile \
             --tag "${SHA_IMAGE_URI}" \
             --tag "${LATEST_IMAGE_URI}" \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-from type=registry,ref=${CACHE_IMAGE_URI} \
+            --cache-to type=registry,ref=${CACHE_IMAGE_URI},mode=max \
             --push \
             .
           echo "sha_image_uri=${SHA_IMAGE_URI}" >> "$GITHUB_OUTPUT"
@@ -132,7 +133,7 @@ jobs:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           set -euo pipefail
-          IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:dev-latest"
+          IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${DEPLOY_ENVIRONMENT}-latest"
           echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve worker image for deploy step
