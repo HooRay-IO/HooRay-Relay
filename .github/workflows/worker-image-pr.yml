@@ -45,7 +45,10 @@ jobs:
       - name: Build worker image
         run: |
           set -euo pipefail
+          mkdir -p /tmp/worker-image/target/release
+          cp target/release/worker /tmp/worker-image/target/release/worker
+          cp worker/Dockerfile.packaging /tmp/worker-image/Dockerfile
           docker build \
-            --file worker/Dockerfile.packaging \
+            --file /tmp/worker-image/Dockerfile \
             --tag hooray-relay-worker:pr \
-            .
+            /tmp/worker-image
