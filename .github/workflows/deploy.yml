@@ -111,14 +111,19 @@ jobs:
           IMAGE_TAG: ${{ github.sha }}
         run: |
           set -euo pipefail
-          IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${IMAGE_TAG}"
+          SHA_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${IMAGE_TAG}"
+          LATEST_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:dev-latest"
           docker buildx build \
             --platform linux/arm64 \
             --file worker/Dockerfile \
-            --tag "${IMAGE_URI}" \
+            --tag "${SHA_IMAGE_URI}" \
+            --tag "${LATEST_IMAGE_URI}" \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
             --push \
             .
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "sha_image_uri=${SHA_IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "latest_image_uri=${LATEST_IMAGE_URI}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve validation worker image
         id: validation-image
@@ -136,7 +141,7 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "${{ steps.mode.outputs.deploy_mode }}" == "deploy" ]]; then
-            echo "image_uri=${{ steps.worker-image.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
+            echo "image_uri=${{ steps.worker-image.outputs.sha_image_uri }}" >> "$GITHUB_OUTPUT"
           else
             echo "image_uri=${{ steps.validation-image.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
           fi
@@ -160,6 +165,15 @@ jobs:
       - name: Build SAM app
         run: sam build --parallel
 
+      - name: Write CI SAM config
+        if: steps.mode.outputs.deploy_mode != 'build_only'
+        run: |
+          cat > /tmp/samconfig-ci.toml <<'EOF'
+          version = 0.1
+          [default.deploy.parameters]
+          confirm_changeset = false
+          EOF
+
       - name: Note fork PR deploy skip
         if: steps.mode.outputs.deploy_mode == 'build_only'
         run: |
@@ -174,6 +188,7 @@ jobs:
           set -euo pipefail
           common_args=(
             --resolve-s3
+            --config-file /tmp/samconfig-ci.toml
             --no-confirm-changeset
             --no-fail-on-empty-changeset
             --stack-name "${{ steps.mode.outputs.stack_name }}"
