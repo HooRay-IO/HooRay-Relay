@@ -103,43 +103,15 @@ jobs:
             echo "stack_name=${STACK_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build and push worker image
-        id: worker-image
-        if: steps.mode.outputs.deploy_mode == 'deploy'
-        env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${IMAGE_TAG}"
-          docker buildx build \
-            --platform linux/arm64 \
-            --file worker/Dockerfile \
-            --tag "${IMAGE_URI}" \
-            --push \
-            .
-          echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve validation worker image
-        id: validation-image
-        if: steps.mode.outputs.deploy_mode == 'validate'
+      - name: Resolve worker image for deploy step
+        id: worker-image-ref
+        if: steps.mode.outputs.deploy_mode != 'build_only'
         env:
           ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
         run: |
           set -euo pipefail
           IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:dev-latest"
           echo "image_uri=${IMAGE_URI}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve worker image for deploy step
-        id: worker-image-ref
-        if: steps.mode.outputs.deploy_mode != 'build_only'
-        run: |
-          set -euo pipefail
-          if [[ "${{ steps.mode.outputs.deploy_mode }}" == "deploy" ]]; then
-            echo "image_uri=${{ steps.worker-image.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "image_uri=${{ steps.validation-image.outputs.image_uri }}" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Validate deploy inputs
         if: steps.mode.outputs.deploy_mode != 'build_only'
@@ -208,3 +180,51 @@ jobs:
           else
             sam deploy "${common_args[@]}"
           fi
+
+      - name: Build and push worker image
+        id: worker-image
+        if: steps.mode.outputs.deploy_mode == 'deploy'
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          SHA_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:${IMAGE_TAG}"
+          LATEST_IMAGE_URI="${ECR_REGISTRY}/${WORKER_ECR_REPOSITORY}:dev-latest"
+          docker buildx build \
+            --platform linux/arm64 \
+            --file worker/Dockerfile \
+            --tag "${SHA_IMAGE_URI}" \
+            --tag "${LATEST_IMAGE_URI}" \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --push \
+            .
+          echo "sha_image_uri=${SHA_IMAGE_URI}" >> "$GITHUB_OUTPUT"
+          echo "latest_image_uri=${LATEST_IMAGE_URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Force ECS rollout for new worker image
+        if: steps.mode.outputs.deploy_mode == 'deploy'
+        run: |
+          set -euo pipefail
+          CLUSTER_NAME="$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_NAME}" \
+            --region "${AWS_REGION}" \
+            --query "Stacks[0].Outputs[?OutputKey=='WorkerEcsClusterName'].OutputValue" \
+            --output text)"
+          SERVICE_NAME="$(aws cloudformation describe-stacks \
+            --stack-name "${STACK_NAME}" \
+            --region "${AWS_REGION}" \
+            --query "Stacks[0].Outputs[?OutputKey=='WorkerEcsServiceName'].OutputValue" \
+            --output text)"
+
+          if [[ -z "${CLUSTER_NAME}" || "${CLUSTER_NAME}" == "None" || -z "${SERVICE_NAME}" || "${SERVICE_NAME}" == "None" ]]; then
+            echo "Unable to resolve ECS cluster/service outputs after deploy." >&2
+            exit 1
+          fi
+
+          aws ecs update-service \
+            --cluster "${CLUSTER_NAME}" \
+            --service "${SERVICE_NAME}" \
+            --force-new-deployment \
+            --region "${AWS_REGION}" >/dev/null
