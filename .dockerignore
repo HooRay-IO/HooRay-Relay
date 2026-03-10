@@ -1,0 +1,6 @@
+.git
+.github
+artifacts
+target
+.zig-cache
+day6-observability-fail.log
