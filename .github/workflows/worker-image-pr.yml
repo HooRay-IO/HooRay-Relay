@@ -22,20 +22,30 @@ permissions:
 jobs:
   build-worker-image:
     runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust deps
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: hooray-relay-rust
+
+      - name: Build worker binary
+        run: cargo build --locked --release -p worker --bin worker
+
+      - name: Verify worker binary
+        run: test -x target/release/worker
 
       - name: Build worker image
         run: |
           set -euo pipefail
-          docker buildx build \
-            --platform linux/amd64 \
-            --file worker/Dockerfile \
-            --cache-from type=gha,scope=worker-image-pr \
-            --cache-to type=gha,mode=max,scope=worker-image-pr \
-            --progress plain \
+          docker build \
+            --file worker/Dockerfile.packaging \
+            --tag hooray-relay-worker:pr \
             .
