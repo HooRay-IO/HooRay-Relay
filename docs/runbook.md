@@ -11,9 +11,9 @@ Use it for:
 - webhook config verification and updates.
 
 Related docs:
-- [troubleshooting.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/troubleshooting.md)
-- [WORKER_RUNTIME.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/WORKER_RUNTIME.md)
-- [retry-behavior.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/retry-behavior.md)
+- [troubleshooting.md](./troubleshooting.md)
+- [WORKER_RUNTIME.md](./WORKER_RUNTIME.md)
+- [retry-behavior.md](./retry-behavior.md)
 
 ## Worker Health Checks
 
@@ -173,7 +173,7 @@ Verify:
 Preferred path is the ingestion API, not ad hoc DynamoDB edits:
 
 ```bash
-curl -sS -X POST "${API_URL}webhooks/configs" \
+curl -sS -X POST "${API_URL}/webhooks/configs" \
   -H 'content-type: application/json' \
   -d '{"customer_id":"<customer_id>","url":"https://example.com/webhooks","secret":"whsec_new","active":true,"max_retries":3}'
 ```

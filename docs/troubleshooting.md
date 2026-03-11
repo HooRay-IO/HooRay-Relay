@@ -25,9 +25,9 @@ Primary operational workflow:
    - replay from DLQ only after fix is verified
 
 Useful references:
-- [runbook.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/runbook.md)
-- [retry-behavior.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/retry-behavior.md)
-- [WORKER_RUNTIME.md](/Users/yizehu/Workspaces/HooRay-Relay/docs/WORKER_RUNTIME.md)
+- [runbook.md](./runbook.md)
+- [retry-behavior.md](./retry-behavior.md)
+- [WORKER_RUNTIME.md](./WORKER_RUNTIME.md)
 
 ## Symptom Playbooks
 

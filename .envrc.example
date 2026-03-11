@@ -29,7 +29,7 @@ export INGESTION_API_URL=$(aws cloudformation describe-stacks \
   --profile "$AWS_PROFILE" --stack-name "$STACK_NAME" --region "$AWS_REGION" \
   --query "Stacks[0].Outputs[?OutputKey=='IngestionApiUrl'].OutputValue" \
   --output text)
-export API_URL="${INGESTION_API_URL%/}"
+export API_URL="$INGESTION_API_URL"
 export CUSTOMER_ID="cust_load_test"
 
 # Backward-compatible aliases for older scripts

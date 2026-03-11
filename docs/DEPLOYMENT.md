@@ -170,7 +170,7 @@ This script uses `samconfig.local.toml` and keeps account-specific values out of
 
 ### CI/CD Deploy Path
 
-The repo now includes [`deploy.yml`](/Users/yizehu/Workspaces/HooRay-Relay/.github/workflows/deploy.yml) for GitHub Actions deployment on `main` and manual dispatch.
+The repo now includes [`deploy.yml`](/.github/workflows/deploy.yml) for GitHub Actions deployment on `main` and manual dispatch.
 
 It does all of the following in CI:
 - assumes an AWS role via GitHub OIDC,

@@ -22,6 +22,9 @@ ARTIFACT_SAFE_ENV_KEYS=(
   SUMMARY_JSON_PATH
   TARGET_EVENTS
   TEST_RUN_ID
+  API_URL
+  BASE_URL
+  TARGET_URL
 )
 
 write_sanitized_env_snapshot() {
