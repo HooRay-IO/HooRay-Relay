@@ -168,6 +168,39 @@ For ECS worker-enabled deploys (local/dev), use local overrides:
 
 This script uses `samconfig.local.toml` and keeps account-specific values out of CI.
 
+### CI/CD Deploy Path
+
+The repo now includes [`deploy.yml`](/.github/workflows/deploy.yml) for GitHub Actions deployment on `main` and manual dispatch.
+
+It does all of the following in CI:
+- assumes an AWS role via GitHub OIDC,
+- builds and pushes the worker image to ECR,
+- runs `sam build`,
+- deploys the SAM stack with ECS worker parameters passed explicitly.
+
+Required GitHub configuration:
+
+- Secret: `AWS_ROLE_TO_ASSUME`
+- Variable: `AWS_REGION`
+- Variable: `SAM_STACK_NAME`
+- Variable: `DEPLOY_ENVIRONMENT`
+- Variable: `ECS_SUBNET_IDS`
+- Variable: `ECS_SECURITY_GROUP_IDS`
+
+Optional GitHub variables:
+
+- `ENABLE_ECS_WORKER`
+- `WORKER_ECR_REPOSITORY`
+- `WORKER_DESIRED_COUNT`
+- `WORKER_CPU`
+- `WORKER_MEMORY`
+- `WORKER_ASSIGN_PUBLIC_IP`
+- `SQS_VISIBILITY_TIMEOUT_SECONDS`
+- `SQS_MAX_RECEIVE_COUNT`
+- `GITHUB_ENVIRONMENT`
+
+Important: CI deploys do not use `samconfig.local.toml` or a local AWS profile. Those remain local-only paths.
+
 ### Known-Good ECS Deploy Checklist (validated on February 26, 2026)
 
 1. Ensure worker image tag exists in ECR.

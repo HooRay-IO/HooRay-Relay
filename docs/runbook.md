@@ -1,5 +1,188 @@
 # Operations Runbook
 
+## Scope
+
+This runbook is the primary Day 10 operations guide for the delivery worker.
+
+Use it for:
+- worker health checks,
+- failure investigation,
+- safe manual retries from the DLQ,
+- webhook config verification and updates.
+
+Related docs:
+- [troubleshooting.md](./troubleshooting.md)
+- [WORKER_RUNTIME.md](./WORKER_RUNTIME.md)
+- [retry-behavior.md](./retry-behavior.md)
+
+## Worker Health Checks
+
+### Required runtime configuration
+
+The worker currently requires:
+- `AWS_REGION`
+- `QUEUE_URL` or `WEBHOOK_QUEUE_URL`
+- `EVENTS_TABLE` or `WEBHOOK_EVENTS_TABLE`
+- `CONFIGS_TABLE` or `WEBHOOK_CONFIGS_TABLE`
+- `BREAKER_STATES_TABLE` or `BREAKER_STATE_TABLE`
+
+### ECS service health
+
+```bash
+aws ecs describe-services \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --cluster "$ECS_CLUSTER" \
+  --services "$ECS_SERVICE" \
+  --query "services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,status:status,rollout:deployments[0].rolloutState}" \
+  --output table
+```
+
+Healthy baseline:
+- `desired` matches `running`
+- `pending=0`
+- `status=ACTIVE`
+- `rollout=COMPLETED`
+
+### Queue health
+
+```bash
+aws sqs get-queue-attributes \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --queue-url "$MAIN_QUEUE_URL" \
+  --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible
+```
+
+```bash
+aws sqs get-queue-attributes \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --queue-url "$DLQ_URL" \
+  --attribute-names ApproximateNumberOfMessages
+```
+
+Healthy baseline:
+- main queue visible depth stays low or drains
+- not-visible messages rise only while worker is actively processing
+- DLQ depth remains flat on happy path
+
+### Logs and recent delivery activity
+
+```bash
+aws logs tail "/ecs/${ECS_SERVICE}" \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --since 15m
+```
+
+Look for:
+- steady polling activity,
+- delivery attempt logs,
+- no repeating auth, network, or config errors.
+
+## Investigating Delivery Failures
+
+1. Confirm worker health and queue depth.
+2. Identify the dominant failure class from logs or DLQ inspection.
+3. Inspect the DynamoDB event record and latest attempt rows.
+4. Fix the root cause before any replay.
+5. Replay a small batch first and verify outcomes.
+
+### Inspect one event in DynamoDB
+
+```bash
+EVENT_PK="EVENT#<event_id>"
+
+aws dynamodb query \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --table-name "$EVENTS_TABLE" \
+  --key-condition-expression "pk = :pk" \
+  --expression-attribute-values '{":pk":{"S":"'"$EVENT_PK"'"}}'
+```
+
+Check:
+- `sk=v0` current `status`
+- `attempt_count`
+- latest `ATTEMPT#n`
+- `http_status`
+- `error_message`
+
+## Manual Retry of Failed Events
+
+Manual retry should be done by replaying messages from the DLQ back to the main queue.
+Do not use direct DynamoDB edits as the primary recovery path.
+
+### Safe retry workflow
+
+1. Run inspect mode.
+2. Confirm the failure is understood and fixed.
+3. Dry-run replay for a small set of IDs.
+4. Replay for real.
+5. Verify queue consumption, attempt rows, and final event state.
+
+Inspect:
+
+```bash
+MODE=inspect ./scripts/dlq_ops.sh
+```
+
+Dry-run replay:
+
+```bash
+MODE=replay REPLAY_MESSAGE_IDS="id1,id2" DRY_RUN=true ./scripts/dlq_ops.sh
+```
+
+Real replay:
+
+```bash
+MODE=replay REPLAY_MESSAGE_IDS="id1,id2" DRY_RUN=false ./scripts/dlq_ops.sh
+```
+
+Replay and delete original DLQ messages only after verification:
+
+```bash
+MODE=replay REPLAY_MESSAGE_IDS="id1,id2" DRY_RUN=false DELETE_AFTER_REPLAY=true ./scripts/dlq_ops.sh
+```
+
+## Webhook Config Verification and Updates
+
+The worker reads config from `webhook_configs_{env}` on each attempt.
+If deliveries fail due to bad URL, inactive config, or wrong secret, fix the config first.
+
+### Check current config
+
+```bash
+aws dynamodb get-item \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --table-name "$CONFIGS_TABLE" \
+  --key '{"pk":{"S":"CUSTOMER#<customer_id>"},"sk":{"S":"CONFIG"}}'
+```
+
+Verify:
+- `url`
+- `secret`
+- `active`
+- `max_retries`
+- `updated_at`
+
+### Update config through ingestion API
+
+Preferred path is the ingestion API, not ad hoc DynamoDB edits:
+
+```bash
+curl -sS -X POST "${API_URL}/webhooks/configs" \
+  -H 'content-type: application/json' \
+  -d '{"customer_id":"<customer_id>","url":"https://example.com/webhooks","secret":"whsec_new","active":true,"max_retries":3}'
+```
+
+After config changes:
+- verify the stored record,
+- submit one small validation event,
+- replay only the affected failed events.
+
 ## DLQ Triage and Replay (`scripts/dlq_ops.sh`)
 
 ### Purpose

@@ -16,6 +16,7 @@ Valid runtime options:
 - `QUEUE_URL` (or `WEBHOOK_QUEUE_URL`)
 - `EVENTS_TABLE` (or `WEBHOOK_EVENTS_TABLE`)
 - `CONFIGS_TABLE` (or `WEBHOOK_CONFIGS_TABLE`)
+- `BREAKER_STATES_TABLE` (or `BREAKER_STATE_TABLE`)
 
 Optional for e2e testing:
 - `DELIVERY_URL`
@@ -69,7 +70,7 @@ Worker task role requires:
 - Desired count: `1` for MVP
 - Networking: private subnets + NAT (or equivalent outbound internet path)
 - CPU/Memory start point: `0.25 vCPU / 512 MiB`
-- Container env vars: `AWS_REGION`, `QUEUE_URL`, `EVENTS_TABLE`, `CONFIGS_TABLE`
+- Container env vars: `AWS_REGION`, `QUEUE_URL`, `EVENTS_TABLE`, `CONFIGS_TABLE`, `BREAKER_STATES_TABLE`
 - Autoscaling target: scale out on SQS queue depth
 - Use helper artifacts in `infra/ecs/`:
   - `infra/ecs/worker-task-policy.template.json`

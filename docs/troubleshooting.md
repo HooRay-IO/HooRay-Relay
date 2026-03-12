@@ -24,6 +24,11 @@ Primary operational workflow:
    - fix root cause first
    - replay from DLQ only after fix is verified
 
+Useful references:
+- [runbook.md](./runbook.md)
+- [retry-behavior.md](./retry-behavior.md)
+- [WORKER_RUNTIME.md](./WORKER_RUNTIME.md)
+
 ## Symptom Playbooks
 
 ### Worker not processing messages
@@ -33,6 +38,23 @@ Checks:
 - Worker logs show polling activity.
 - Worker has valid `QUEUE_URL`, `EVENTS_TABLE`, `CONFIGS_TABLE`, `BREAKER_STATES_TABLE`.
 - IAM for worker role includes SQS + DynamoDB access.
+
+Commands:
+
+```bash
+aws ecs describe-services \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --cluster "$ECS_CLUSTER" \
+  --services "$ECS_SERVICE"
+```
+
+```bash
+aws logs tail "/ecs/${ECS_SERVICE}" \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --since 15m
+```
 
 Actions:
 - Restart/roll out worker task if unhealthy.
@@ -63,6 +85,16 @@ Checks:
 - Main queue visible/not-visible counts and trend.
 - Worker concurrency/capacity.
 - Downstream endpoint latency and error rate.
+
+Command:
+
+```bash
+aws sqs get-queue-attributes \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  --queue-url "$MAIN_QUEUE_URL" \
+  --attribute-names ApproximateNumberOfMessages ApproximateNumberOfMessagesNotVisible
+```
 
 Actions:
 - Remove blockers first (endpoint outage, config errors).
