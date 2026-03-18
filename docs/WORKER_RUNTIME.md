@@ -43,7 +43,7 @@ RUST_LOG=info ./target/release/worker
 ```bash
 export AWS_REGION=us-west-2
 export AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-export ECR_REPO=hooray-relay-worker
+export ECR_REPO=hooray-relay-worker-dev  # or hooray-relay-worker-<env>
 export IMAGE_TAG="$(git rev-parse --short HEAD)"
 
 aws ecr describe-repositories --repository-names "$ECR_REPO" --region "$AWS_REGION" >/dev/null 2>&1 || \
@@ -103,6 +103,8 @@ SKIP_DELIVERY=false ./worker/tests/end_to_end_test.sh
 REGION=us-west-2
 PROFILE=hooray-dev
 STACK=hooray-dev
+
+# Replace dev with staging/prod as needed.
 
 API_URL=$(aws cloudformation describe-stacks \
   --stack-name "$STACK" --region "$REGION" --profile "$PROFILE" \
