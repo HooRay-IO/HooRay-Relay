@@ -35,6 +35,44 @@ disable_rollback  = false
 parameter_overrides = "Environment=dev SqsVisibilityTimeoutSeconds=60 SqsMaxReceiveCount=4 EnableEcsWorker=false"
 ```
 
+### `samconfig.staging.toml` and `samconfig.prod.toml`
+
+Environment-specific SAM config files keep stage/prod settings isolated from dev.
+
+```toml
+# samconfig.staging.toml
+version = 0.1
+
+[default.deploy.parameters]
+stack_name        = "hooray-staging"
+region            = "us-west-2"
+profile           = "hooray-staging"
+confirm_changeset = true
+capabilities      = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+disable_rollback  = false
+parameter_overrides = "Environment=staging SqsVisibilityTimeoutSeconds=60 SqsMaxReceiveCount=4 EnableEcsWorker=false"
+```
+
+```toml
+# samconfig.prod.toml
+version = 0.1
+
+[default.deploy.parameters]
+stack_name        = "hooray-prod"
+region            = "us-west-2"
+profile           = "hooray-prod"
+confirm_changeset = true
+capabilities      = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+disable_rollback  = false
+parameter_overrides = "Environment=prod SqsVisibilityTimeoutSeconds=60 SqsMaxReceiveCount=4 EnableEcsWorker=false"
+```
+
+Suggested naming convention:
+
+- Stack name: `hooray-<env>`
+- AWS profile: `hooray-<env>`
+- ECR repo: `hooray-relay-worker-<env>`
+
 ### `samconfig.local.toml` (local only)
 
 Account-specific ECS values should live in local config, not in committed config.
@@ -73,10 +111,14 @@ The worker is not deployed via SAM as Lambda in the current architecture.
 Template for local environment variables:
 
 ```bash
-export AWS_PROFILE="your-aws-profile"   # fill in: hooray-dev
+export AWS_PROFILE="hooray-dev"   # or hooray-<env>
 export AWS_REGION="us-west-2"
 export AWS_DEFAULT_REGION="$AWS_REGION"
+export STACK_NAME="hooray-dev"    # or hooray-<env>
+export ECR_REPO="hooray-relay-worker-dev"  # or hooray-relay-worker-<env>
 ```
+
+Note: replace `dev` with `staging` or `prod` when working in those environments.
 
 ---
 
@@ -88,15 +130,15 @@ Need from the platform/admin team:
 
 - [ ] AWS SSO start URL
 - [ ] AWS SSO region (for the Identity Center instance)
-- [ ] AWS account ID that contains the `hooray-dev` deploy role
+- [ ] AWS account ID that contains the `hooray-<env>` deploy role
 - [ ] SSO role name to assume for deployment (e.g. `HoorayDevDeploymentRole`)
 - [ ] Confirm the deploy region (`us-west-2`)
 - [ ] The deploy role must allow: CloudFormation, DynamoDB, SQS, Lambda, API Gateway, S3, IAM
 
-### Step 3b — Configure the `hooray-dev` profile via SSO ⏳ PENDING
+### Step 3b — Configure the `hooray-<env>` profile via SSO ⏳ PENDING
 
 ```bash
-aws configure sso --profile hooray-dev
+aws configure sso --profile hooray-<env>
 # SSO session name:             hooray-dev
 # SSO start URL:                <from Step 3a>
 # SSO region:                   <from Step 3a>
@@ -109,7 +151,7 @@ aws configure sso --profile hooray-dev
 Verify credentials work:
 
 ```bash
-aws sts get-caller-identity --profile hooray-dev
+aws sts get-caller-identity --profile hooray-<env>
 # { "Account": "...", "UserId": "...", "Arn": "..." }
 ```
 
@@ -152,6 +194,8 @@ aws cloudformation describe-stacks \
 Expected outputs: `EventsTableName`, `IdempotencyTableName`, `ConfigsTableName`,
 `QueueUrl`, `DLQUrl`, `IngestionApiUrl`.
 
+Note: the API Gateway stage name may be `Prod` even when deploying non-prod environments. The stack/environment name controls resource isolation; the API stage name can be configured independently.
+
 ---
 
 ## 4. Subsequent Deployments
@@ -178,6 +222,11 @@ It does all of the following in CI:
 - runs `sam build`,
 - deploys the SAM stack with ECS worker parameters passed explicitly.
 
+Deploy order and approvals:
+- Deploys run in strict order: **dev → staging → prod**.
+- A separate **`prod-approval`** environment gate is required before the prod job starts.
+- Configure required reviewers in GitHub for the `prod-approval` environment to enable the approval step.
+
 Required GitHub configuration:
 
 - Secret: `AWS_ROLE_TO_ASSUME`
@@ -186,6 +235,8 @@ Required GitHub configuration:
 - Variable: `DEPLOY_ENVIRONMENT`
 - Variable: `ECS_SUBNET_IDS`
 - Variable: `ECS_SECURITY_GROUP_IDS`
+
+Recommendation: set `AWS_ROLE_TO_ASSUME` as an **environment secret** (dev/staging/prod) so each job assumes the correct role. If only the repo-level variable is set, all environments will attempt to use the same role.
 
 Optional GitHub variables:
 
@@ -208,9 +259,11 @@ Important: CI deploys do not use `samconfig.local.toml` or a local AWS profile. 
 ```bash
 aws ecr describe-images \
   --region us-west-2 \
-  --repository-name hooray-relay-worker-dev \
+  --repository-name hooray-relay-worker-<env> \
   --image-ids imageTag=<IMAGE_TAG>
 ```
+
+Replace `<env>` with `dev`, `staging`, or `prod` for your target environment.
 
 2. Set `WorkerImageUri` in `samconfig.local.toml` to that exact tag.
 
@@ -226,11 +279,13 @@ aws ecr describe-images \
 aws ecs describe-services \
   --region us-west-2 \
   --profile hooray-dev \
-  --cluster hooray-relay-worker-dev \
-  --services hooray-relay-worker-dev \
+  --cluster hooray-relay-worker-<env> \
+  --services hooray-relay-worker-<env> \
   --query "services[0].{desired:desiredCount,running:runningCount,pending:pendingCount,rollout:deployments[0].rolloutState}" \
   --output table
 ```
+
+Replace `<env>` with `dev`, `staging`, or `prod`, and update `--profile` accordingly.
 
 Expected result: `desired=1`, `running=1`, `pending=0`, `rollout=COMPLETED`.
 

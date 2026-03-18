@@ -201,6 +201,8 @@ The script defaults to dev settings:
 - `MODE=inspect`
 - `DRY_RUN=true`
 
+Replace `dev` with `staging` or `prod` when operating in those environments.
+
 It auto-resolves `DLQ_URL`, `MAIN_QUEUE_URL`, and `EVENTS_TABLE` from CloudFormation stack outputs.
 
 ### Inspect DLQ
