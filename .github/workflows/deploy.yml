@@ -67,11 +67,20 @@ jobs:
             echo "is_fork_pr=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Resolve deploy role
+        if: steps.trust.outputs.is_fork_pr != 'true'
+        run: |
+          set -euo pipefail
+          if [[ -z "${{ secrets.AWS_ROLE_TO_ASSUME }}" && -z "${{ vars.AWS_ROLE_TO_ASSUME }}" ]]; then
+            echo "Missing AWS_ROLE_TO_ASSUME for this environment. Set it as an environment secret or variable." >&2
+            exit 1
+          fi
+
       - name: Configure AWS credentials
         if: steps.trust.outputs.is_fork_pr != 'true'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || vars.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Ensure ECR repository exists
@@ -223,7 +232,7 @@ jobs:
         if: steps.mode.outputs.deploy_mode != 'build_only'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME || secrets.AWS_ROLE_TO_ASSUME }}
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME || vars.AWS_ROLE_TO_ASSUME }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Note fork PR deploy skip

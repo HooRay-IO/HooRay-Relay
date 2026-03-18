@@ -236,6 +236,8 @@ Required GitHub configuration:
 - Variable: `ECS_SUBNET_IDS`
 - Variable: `ECS_SECURITY_GROUP_IDS`
 
+Recommendation: set `AWS_ROLE_TO_ASSUME` as an **environment secret** (dev/staging/prod) so each job assumes the correct role. If only the repo-level variable is set, all environments will attempt to use the same role.
+
 Optional GitHub variables:
 
 - `ENABLE_ECS_WORKER`
