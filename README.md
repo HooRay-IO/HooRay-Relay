@@ -6,6 +6,9 @@ Current runtime split:
 - Delivery worker runs as a long-running SQS poller (non-Lambda) for MVP.
 - See `docs/WORKER_RUNTIME.md` for worker deployment and e2e steps.
 
+Release readiness:
+- [Release 1.0.0 Go / No-Go Checklist](docs/release-1.0.0-go-no-go-checklist.md)
+
 ## Worker Workflow
 
 ```mermaid
