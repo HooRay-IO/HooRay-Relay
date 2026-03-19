@@ -9,6 +9,7 @@ Current runtime split:
 Release readiness:
 - [Release 1.0.0 Go / No-Go Checklist](docs/release-1.0.0-go-no-go-checklist.md)
 - [Release 1.0.0 Notes](docs/release-1.0.0-notes.md)
+- [Networking Hardening Checklist](docs/networking-hardening-checklist.md)
 - [Rollback Runbook](docs/rollback.md)
 
 ## Worker Workflow
