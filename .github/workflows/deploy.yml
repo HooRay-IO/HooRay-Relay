@@ -213,49 +213,6 @@ jobs:
             exit 1
           fi
 
-      - name: Preflight ECS network resources
-        if: steps.mode.outputs.deploy_mode != 'build_only'
-        run: |
-          set -euo pipefail
-
-          IFS=',' read -r -a subnet_ids <<< "${ECS_SUBNET_IDS}"
-          IFS=',' read -r -a security_group_ids <<< "${ECS_SECURITY_GROUP_IDS}"
-
-          for attempt in 1 2 3 4 5 6; do
-            missing=0
-
-            for subnet_id in "${subnet_ids[@]}"; do
-              subnet_id="${subnet_id// /}"
-              if ! aws ec2 describe-subnets \
-                --region "${AWS_REGION}" \
-                --subnet-ids "${subnet_id}" >/dev/null 2>&1; then
-                echo "Subnet not yet visible: ${subnet_id}" >&2
-                missing=1
-              fi
-            done
-
-            for security_group_id in "${security_group_ids[@]}"; do
-              security_group_id="${security_group_id// /}"
-              if ! aws ec2 describe-security-groups \
-                --region "${AWS_REGION}" \
-                --group-ids "${security_group_id}" >/dev/null 2>&1; then
-                echo "Security group not yet visible: ${security_group_id}" >&2
-                missing=1
-              fi
-            done
-
-            if [[ "${missing}" -eq 0 ]]; then
-              echo "ECS network resources are resolvable."
-              exit 0
-            fi
-
-            echo "Retrying ECS network resource visibility check (${attempt}/6)..." >&2
-            sleep 10
-          done
-
-          echo "One or more ECS subnets or security groups were not resolvable after retries." >&2
-          exit 1
-
       - name: Validate SAM template
         run: sam validate --lint
 
@@ -312,11 +269,38 @@ jobs:
             EcsSecurityGroupIds="${ECS_SECURITY_GROUP_IDS}"
           )
 
-          if [[ "${{ steps.mode.outputs.deploy_mode }}" == "validate" ]]; then
-            sam deploy --no-execute-changeset "${common_args[@]}"
-          else
-            sam deploy "${common_args[@]}"
-          fi
+          run_deploy() {
+            local output_file="$1"
+            set +e
+            if [[ "${{ steps.mode.outputs.deploy_mode }}" == "validate" ]]; then
+              sam deploy --no-execute-changeset "${common_args[@]}" >"${output_file}" 2>&1
+            else
+              sam deploy "${common_args[@]}" >"${output_file}" 2>&1
+            fi
+            local status=$?
+            set -e
+            return "${status}"
+          }
+
+          output_file="$(mktemp)"
+          trap 'rm -f "${output_file}"' EXIT
+
+          for attempt in 1 2 3; do
+            if run_deploy "${output_file}"; then
+              cat "${output_file}"
+              exit 0
+            fi
+
+            cat "${output_file}"
+
+            if grep -q 'AWS::EarlyValidation::ResourceExistenceCheck' "${output_file}" && [[ "${attempt}" -lt 3 ]]; then
+              echo "CloudFormation early validation failed, likely due to resource propagation. Retrying (${attempt}/3)..." >&2
+              sleep 15
+              continue
+            fi
+
+            exit 1
+          done
 
   deploy-staging:
     needs: deploy-dev
