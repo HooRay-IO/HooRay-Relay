@@ -6,6 +6,10 @@ and secrets.
 ## Variables
 
 ```bash
+cp .github/env/dev.env.example .github/env/dev.env
+cp .github/env/staging.env.example .github/env/staging.env
+cp .github/env/prod.env.example .github/env/prod.env
+
 gh variable set -e dev -f .github/env/dev.env
 gh variable set -e staging -f .github/env/staging.env
 gh variable set -e prod -f .github/env/prod.env
@@ -24,6 +28,8 @@ gh secret set -e prod -f .github/env/prod.secrets.env.example
 
 ## Notes
 
+- The repo tracks `*.env.example` templates only. Real `.env` files under
+  `.github/env/` are ignored.
 - Replace the placeholder subnet and security group values before import.
 - `prod-approval` should contain required reviewers only; it does not need deploy
   secrets or variables.
