@@ -1,0 +1,16 @@
+{
+  "AlarmName": "hooray-worker-latency-p95-__ENVIRONMENT__",
+  "AlarmDescription": "Worker delivery latency p95 > 5000ms over 5 minutes",
+  "ComparisonOperator": "GreaterThanThreshold",
+  "EvaluationPeriods": 1,
+  "Threshold": 5000,
+  "TreatMissingData": "notBreaching",
+  "MetricName": "webhook.delivery.latency_ms",
+  "Namespace": "HoorayRelay/Worker",
+  "Dimensions": [
+    { "Name": "environment", "Value": "__ENVIRONMENT__" },
+    { "Name": "queue_name", "Value": "__QUEUE_NAME__" }
+  ],
+  "Period": 300,
+  "ExtendedStatistic": "p95"
+}

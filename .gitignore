@@ -20,6 +20,8 @@ target/
 !.env.example
 .envrc
 !.envrc.example
+.github/env/*.env
+!.github/env/*.env.example
 
 # Logs and runtime dumps
 *.log

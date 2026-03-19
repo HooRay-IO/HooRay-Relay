@@ -5,28 +5,24 @@ These files support Day 6 monitoring rollout for both ingestion and worker servi
 ## Worker: Apply Dashboard
 
 ```bash
-aws cloudwatch put-dashboard \
-  --dashboard-name hooray-relay-worker-dev \
-  --dashboard-body file://monitoring/worker-dashboard.json \
-  --region us-west-2 \
-  --profile hooray-dev
+./scripts/apply_worker_monitoring.sh dev
 ```
 
 ## Worker: Apply Alarms
 
 ```bash
-aws cloudwatch put-metric-alarm \
-  --cli-input-json file://monitoring/alarms/worker-failure-rate.json \
-  --region us-west-2 \
-  --profile hooray-dev
-
-aws cloudwatch put-metric-alarm \
-  --cli-input-json file://monitoring/alarms/worker-latency-p95.json \
-  --region us-west-2 \
-  --profile hooray-dev
+./scripts/apply_worker_monitoring.sh staging
+./scripts/apply_worker_monitoring.sh prod
 ```
 
 `DLQDepthAlarm` is provisioned via `template.yaml` and should remain enabled.
+
+Worker dashboard and worker alarm payloads are rendered from environment-aware
+templates before upload. Source templates:
+
+- `monitoring/worker-dashboard.template.json`
+- `monitoring/alarms/worker-failure-rate.template.json`
+- `monitoring/alarms/worker-latency-p95.template.json`
 
 ## Worker: Validate Day 6 End-to-End
 

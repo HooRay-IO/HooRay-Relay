@@ -559,6 +559,26 @@ Resources:
           SecurityGroups: !Split [",", !Ref EcsSecurityGroupIds]
           Subnets: !Split [",", !Ref EcsSubnetIds]
 
+  WorkerRunningTaskCountAlarm:
+    Condition: CreateEcsWorker
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "hooray-worker-running-count-${Environment}"
+      AlarmDescription: "Worker ECS service has fewer running tasks than expected"
+      Namespace: AWS/ECS
+      MetricName: RunningTaskCount
+      Dimensions:
+        - Name: ClusterName
+          Value: !Ref WorkerEcsCluster
+        - Name: ServiceName
+          Value: !GetAtt WorkerEcsService.Name
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+
 # ---------------------------------------------------------------------------
 # Outputs — referenced by both engineers in local testing and CI
 # ---------------------------------------------------------------------------

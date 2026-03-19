@@ -226,6 +226,8 @@ Deploy order and approvals:
 - Deploys run in strict order: **dev → staging → prod**.
 - A separate **`prod-approval`** environment gate is required before the prod job starts.
 - Configure required reviewers in GitHub for the `prod-approval` environment to enable the approval step.
+- Those reviewers are GitHub users or GitHub teams, not AWS IAM users.
+- The prod job still needs AWS permissions separately through the environment-specific `AWS_ROLE_TO_ASSUME` role.
 
 Required GitHub configuration:
 
@@ -237,6 +239,12 @@ Required GitHub configuration:
 - Variable: `ECS_SECURITY_GROUP_IDS`
 
 Recommendation: set `AWS_ROLE_TO_ASSUME` as an **environment secret** (dev/staging/prod) so each job assumes the correct role. If only the repo-level variable is set, all environments will attempt to use the same role.
+
+Approval and access model:
+
+- GitHub environment reviewers control whether the prod workflow may proceed.
+- AWS IAM controls what the workflow may do after approval.
+- A prod approval in GitHub does not by itself grant deploy or rollback rights in AWS.
 
 Optional GitHub variables:
 
