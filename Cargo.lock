@@ -1377,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "ingestion"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aws-config",
  "aws-sdk-dynamodb",
@@ -3377,7 +3377,7 @@ dependencies = [
 
 [[package]]
 name = "worker"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "aws-config",
  "aws-sdk-dynamodb",
