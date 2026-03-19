@@ -269,11 +269,38 @@ jobs:
             EcsSecurityGroupIds="${ECS_SECURITY_GROUP_IDS}"
           )
 
-          if [[ "${{ steps.mode.outputs.deploy_mode }}" == "validate" ]]; then
-            sam deploy --no-execute-changeset "${common_args[@]}"
-          else
-            sam deploy "${common_args[@]}"
-          fi
+          run_deploy() {
+            local output_file="$1"
+            set +e
+            if [[ "${{ steps.mode.outputs.deploy_mode }}" == "validate" ]]; then
+              sam deploy --no-execute-changeset "${common_args[@]}" >"${output_file}" 2>&1
+            else
+              sam deploy "${common_args[@]}" >"${output_file}" 2>&1
+            fi
+            local status=$?
+            set -e
+            return "${status}"
+          }
+
+          output_file="$(mktemp)"
+          trap 'rm -f "${output_file}"' EXIT
+
+          for attempt in 1 2 3; do
+            if run_deploy "${output_file}"; then
+              cat "${output_file}"
+              exit 0
+            fi
+
+            cat "${output_file}"
+
+            if grep -q 'AWS::EarlyValidation::ResourceExistenceCheck' "${output_file}" && [[ "${attempt}" -lt 3 ]]; then
+              echo "CloudFormation early validation failed, likely due to resource propagation. Retrying (${attempt}/3)..." >&2
+              sleep 15
+              continue
+            fi
+
+            exit 1
+          done
 
   deploy-staging:
     needs: deploy-dev
