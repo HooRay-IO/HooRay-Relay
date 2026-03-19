@@ -64,12 +64,12 @@ Parameters:
     Description: Assign public IP to ECS worker tasks.
 
   EcsSubnetIds:
-    Type: String
+    Type: CommaDelimitedList
     Default: "subnet-00000000"
     Description: Comma-separated subnet IDs for ECS worker tasks (override when EnableEcsWorker=true).
 
   EcsSecurityGroupIds:
-    Type: String
+    Type: CommaDelimitedList
     Default: "sg-00000000"
     Description: Comma-separated security group IDs for ECS worker tasks (override when EnableEcsWorker=true).
 
@@ -556,8 +556,8 @@ Resources:
       NetworkConfiguration:
         AwsvpcConfiguration:
           AssignPublicIp: !Ref WorkerAssignPublicIp
-          SecurityGroups: !Split [",", !Ref EcsSecurityGroupIds]
-          Subnets: !Split [",", !Ref EcsSubnetIds]
+          SecurityGroups: !Ref EcsSecurityGroupIds
+          Subnets: !Ref EcsSubnetIds
 
   WorkerRunningTaskCountAlarm:
     Condition: CreateEcsWorker
