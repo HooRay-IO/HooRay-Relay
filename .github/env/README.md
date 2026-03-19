@@ -9,7 +9,6 @@ and secrets.
 cp .github/env/dev.env.example .github/env/dev.env
 cp .github/env/staging.env.example .github/env/staging.env
 cp .github/env/prod.env.example .github/env/prod.env
-
 gh variable set -e dev -f .github/env/dev.env
 gh variable set -e staging -f .github/env/staging.env
 gh variable set -e prod -f .github/env/prod.env
