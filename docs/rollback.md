@@ -75,7 +75,7 @@ aws cloudwatch describe-alarms \
   --region "$AWS_REGION" \
   --profile "$AWS_PROFILE" \
   --alarm-names \
-    "hooray-worker-running-count-${ENV}" \
+    "hooray-worker-queue-age-${ENV}" \
     "hooray-worker-failure-rate-${ENV}" \
     "hooray-worker-latency-p95-${ENV}" \
     "hooray-relay-dlq-depth-${ENV}" \
@@ -196,7 +196,7 @@ If both ingestion and worker changed in the bad release, roll back to the previo
 After rollback, verify all of the following:
 
 - ECS service has `desired=running` and `pending=0`
-- worker running-count alarm is not breaching after metrics settle
+- worker queue-age alarm is not breaching after metrics settle
 - worker failure-rate and latency alarms return to normal
 - DLQ growth stops
 - queue visible depth is stable or draining
@@ -219,7 +219,7 @@ aws cloudwatch describe-alarms \
   --region "$AWS_REGION" \
   --profile "$AWS_PROFILE" \
   --alarm-names \
-    "hooray-worker-running-count-${ENV}" \
+    "hooray-worker-queue-age-${ENV}" \
     "hooray-worker-failure-rate-${ENV}" \
     "hooray-worker-latency-p95-${ENV}" \
     "hooray-relay-dlq-depth-${ENV}" \

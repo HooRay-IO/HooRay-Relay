@@ -23,6 +23,11 @@ templates before upload. Source templates:
 - `monitoring/worker-dashboard.template.json`
 - `monitoring/alarms/worker-failure-rate.template.json`
 - `monitoring/alarms/worker-latency-p95.template.json`
+- `monitoring/alarms/worker-queue-age.template.json`
+
+`apply_worker_monitoring.sh` also removes the legacy
+`hooray-worker-running-count-<env>` alarm because `AWS/ECS RunningTaskCount`
+is not emitted for this service and produces stale alarms.
 
 ## Worker: Validate Day 6 End-to-End
 
