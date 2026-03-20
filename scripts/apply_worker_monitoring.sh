@@ -87,9 +87,10 @@ QUEUE_NAME="${QUEUE_URL##*/}"
 DASHBOARD_FILE="$(mktemp)"
 FAILURE_ALARM_FILE="$(mktemp)"
 LATENCY_ALARM_FILE="$(mktemp)"
+QUEUE_AGE_ALARM_FILE="$(mktemp)"
 
 cleanup() {
-  rm -f "$DASHBOARD_FILE" "$FAILURE_ALARM_FILE" "$LATENCY_ALARM_FILE"
+  rm -f "$DASHBOARD_FILE" "$FAILURE_ALARM_FILE" "$LATENCY_ALARM_FILE" "$QUEUE_AGE_ALARM_FILE"
 }
 
 trap cleanup EXIT
@@ -97,6 +98,7 @@ trap cleanup EXIT
 render_template "${REPO_ROOT}/monitoring/worker-dashboard.template.json" "$DASHBOARD_FILE"
 render_template "${REPO_ROOT}/monitoring/alarms/worker-failure-rate.template.json" "$FAILURE_ALARM_FILE"
 render_template "${REPO_ROOT}/monitoring/alarms/worker-latency-p95.template.json" "$LATENCY_ALARM_FILE"
+render_template "${REPO_ROOT}/monitoring/alarms/worker-queue-age.template.json" "$QUEUE_AGE_ALARM_FILE"
 
 aws cloudwatch put-dashboard \
   --dashboard-name "hooray-relay-worker-${ENVIRONMENT}" \
@@ -113,5 +115,16 @@ aws cloudwatch put-metric-alarm \
   --cli-input-json "file://${LATENCY_ALARM_FILE}" \
   --region "$AWS_REGION" \
   --profile "$AWS_PROFILE"
+
+aws cloudwatch put-metric-alarm \
+  --cli-input-json "file://${QUEUE_AGE_ALARM_FILE}" \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE"
+
+aws cloudwatch delete-alarms \
+  --alarm-names "hooray-worker-running-count-${ENVIRONMENT}" \
+  --region "$AWS_REGION" \
+  --profile "$AWS_PROFILE" \
+  >/dev/null 2>&1 || true
 
 echo "Applied worker monitoring for environment=${ENVIRONMENT} queue_name=${QUEUE_NAME}"

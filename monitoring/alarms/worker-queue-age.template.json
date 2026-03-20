@@ -1,0 +1,15 @@
+{
+  "AlarmName": "hooray-worker-queue-age-__ENVIRONMENT__",
+  "AlarmDescription": "Worker queue oldest message age > 300s for 2 minutes",
+  "ComparisonOperator": "GreaterThanThreshold",
+  "EvaluationPeriods": 2,
+  "Threshold": 300,
+  "TreatMissingData": "notBreaching",
+  "MetricName": "ApproximateAgeOfOldestMessage",
+  "Namespace": "AWS/SQS",
+  "Dimensions": [
+    { "Name": "QueueName", "Value": "__QUEUE_NAME__" }
+  ],
+  "Period": 60,
+  "Statistic": "Maximum"
+}
