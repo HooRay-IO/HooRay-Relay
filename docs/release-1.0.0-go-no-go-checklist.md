@@ -17,7 +17,7 @@ Use this checklist as the final release decision gate for `v1.0.0`.
 - [x] `cargo test --workspace --locked` passes on the release branch
 - [x] Release metadata is ready: versions bumped, release notes prepared, tag planned
 - [ ] Prod deploy permissions and owners are confirmed
-- [ ] No unresolved Sev-1 or Sev-2 known issues remain
+- [x] No unresolved Sev-1 or Sev-2 known issues remain
 
 ## No-Go Criteria
 
