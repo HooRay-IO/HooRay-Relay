@@ -1,0 +1,48 @@
+{
+  "AlarmName": "hooray-worker-failure-rate-__ENVIRONMENT__",
+  "AlarmDescription": "Worker failure rate > 10% over 5 minutes",
+  "ComparisonOperator": "GreaterThanThreshold",
+  "EvaluationPeriods": 1,
+  "Threshold": 10,
+  "TreatMissingData": "notBreaching",
+  "Metrics": [
+    {
+      "Id": "failures",
+      "ReturnData": false,
+      "MetricStat": {
+        "Metric": {
+          "Namespace": "HoorayRelay/Worker",
+          "MetricName": "webhook.delivery.failure",
+          "Dimensions": [
+            { "Name": "environment", "Value": "__ENVIRONMENT__" },
+            { "Name": "queue_name", "Value": "__QUEUE_NAME__" }
+          ]
+        },
+        "Period": 300,
+        "Stat": "Sum"
+      }
+    },
+    {
+      "Id": "successes",
+      "ReturnData": false,
+      "MetricStat": {
+        "Metric": {
+          "Namespace": "HoorayRelay/Worker",
+          "MetricName": "webhook.delivery.success",
+          "Dimensions": [
+            { "Name": "environment", "Value": "__ENVIRONMENT__" },
+            { "Name": "queue_name", "Value": "__QUEUE_NAME__" }
+          ]
+        },
+        "Period": 300,
+        "Stat": "Sum"
+      }
+    },
+    {
+      "Id": "failureRate",
+      "Expression": "IF((failures + successes) > 0, 100 * failures / (failures + successes), 0)",
+      "Label": "FailureRatePercent",
+      "ReturnData": true
+    }
+  ]
+}

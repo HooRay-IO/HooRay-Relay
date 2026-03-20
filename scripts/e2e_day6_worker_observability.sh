@@ -55,22 +55,11 @@ LATENCY_P95_ALARM_NAME="${LATENCY_P95_ALARM_NAME:-hooray-worker-latency-p95-${EN
 DLQ_ALARM_NAME="${DLQ_ALARM_NAME:-hooray-relay-dlq-depth-${ENVIRONMENT}}"
 
 if [[ "$APPLY_MONITORING" == "true" ]]; then
-  echo "[setup] Applying dashboard + alarms from monitoring/ artifacts"
-  aws cloudwatch put-dashboard \
-    --dashboard-name "hooray-relay-worker-${ENVIRONMENT}" \
-    --dashboard-body "file://${REPO_ROOT}/monitoring/worker-dashboard.json" \
-    --region "$AWS_REGION" \
-    --profile "$AWS_PROFILE" >/dev/null
-
-  aws cloudwatch put-metric-alarm \
-    --cli-input-json "file://${REPO_ROOT}/monitoring/alarms/worker-failure-rate.json" \
-    --region "$AWS_REGION" \
-    --profile "$AWS_PROFILE" >/dev/null
-
-  aws cloudwatch put-metric-alarm \
-    --cli-input-json "file://${REPO_ROOT}/monitoring/alarms/worker-latency-p95.json" \
-    --region "$AWS_REGION" \
-    --profile "$AWS_PROFILE" >/dev/null
+  echo "[setup] Applying environment-aware dashboard + alarms"
+  AWS_REGION="$AWS_REGION" \
+  AWS_PROFILE="$AWS_PROFILE" \
+  STACK_NAME="$STACK_NAME" \
+  "${REPO_ROOT}/scripts/apply_worker_monitoring.sh" "$ENVIRONMENT" >/dev/null
 fi
 
 STACK_OUTPUTS_JSON="$(aws cloudformation describe-stacks \
