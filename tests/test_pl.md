@@ -151,8 +151,7 @@ API_URL="<INGESTION_URL>" RATE=60 DURATION=5m MODE=steady k6 run tests/load_test
 Use the mock server settings to return 10–20% 500s/timeouts.
 
 ### Duplicate storm
-```bash
-API_URL="<INGESTION_URL>" RATE=50 DURATION=5m MODE=duplicate k6 run tests/load_test.js
+To simulate a surge of duplicate events, first update `tests/load_test.js` so that it checks for a `FIXED_IDEMPOTENCY_KEY` environment variable and, when present, uses that value for the `idempotency_key` on every request instead of generating a random one.
 ```
 
 ---

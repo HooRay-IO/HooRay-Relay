@@ -16,11 +16,28 @@ import os
 import random
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import sys
 
 PORT = int(os.getenv("MOCK_PORT", "8089"))
 LATENCY_MS = int(os.getenv("MOCK_LATENCY_MS", "50"))
-FAIL_RATE = float(os.getenv("MOCK_FAIL_RATE", "0.0"))
-TIMEOUT_RATE = float(os.getenv("MOCK_TIMEOUT_RATE", "0.0"))
+
+
+def _get_rate(env_name: str, default: float) -> float:
+    """Read a probability-like rate from the environment and validate it is in [0.0, 1.0]."""
+    raw = os.getenv(env_name)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        raise SystemExit(f"{env_name} must be a float between 0.0 and 1.0, got {raw!r}")
+    if not 0.0 <= value <= 1.0:
+        raise SystemExit(f"{env_name} must be between 0.0 and 1.0, got {value}")
+    return value
+
+
+FAIL_RATE = _get_rate("MOCK_FAIL_RATE", 0.0)
+TIMEOUT_RATE = _get_rate("MOCK_TIMEOUT_RATE", 0.0)
 TIMEOUT_MS = int(os.getenv("MOCK_TIMEOUT_MS", "2000"))
 
 
